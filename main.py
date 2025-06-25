@@ -125,7 +125,7 @@ Players:
     yield from log("Running tournament …")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         top_k = get_top(top_players, ex)
-    yield "\n".join(process_log + ["Done"]), ", ".join(top_k)
+    yield "\n".join(process_log + ["Done"]), "\n\n\n=====================================================\n\n\n".join(top_k)
 
 demo = gr.Interface(
     fn=run_tournament,
