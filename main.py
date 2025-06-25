@@ -4,6 +4,7 @@ import os, json, re, ast, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from litellm import completion
+import matplotlib.pyplot as plt
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 5))
 POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 10))
@@ -33,10 +34,12 @@ def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool
     pool_size = int(pool_size)
     max_workers = int(max_workers)
     process_log = []
+    hist_fig = None
+    top_picks_str = ""
     def log(msg):
         process_log.append(msg)
         tqdm.write(msg)
-        yield "\n".join(process_log), ""
+        yield "\n".join(process_log), hist_fig, top_picks_str
     yield from log("Generating players …")
     all_players = generate_players(instruction, n_gen)
     yield from log(f"{len(all_players)} players generated")
@@ -64,6 +67,9 @@ Output:
     yield from log("Scoring players …")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         scores = {p: s for p, s in zip(all_players, list(tqdm(ex.map(score, all_players), total=len(all_players))))}
+    hist_fig = plt.figure()
+    plt.hist(list(scores.values()), bins=10)
+    yield from log("Histogram generated")
     top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
     yield from log(f"Filtered to {len(top_players)} players with best scores")
     def prompt_play(a, b):
@@ -125,7 +131,8 @@ Players:
     yield from log("Running tournament …")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         top_k = get_top(top_players, ex)
-    yield "\n".join(process_log + ["Done"]), "\n\n\n=====================================================\n\n\n".join(top_k)
+    top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
+    yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str
 
 demo = gr.Interface(
     fn=run_tournament,
@@ -139,6 +146,7 @@ demo = gr.Interface(
     ],
     outputs=[
         gr.Textbox(lines=10, label="Process"),
+        gr.Plot(label="Score Distribution"),
         gr.Textbox(lines=50, label="Top picks")
     ]
 )
