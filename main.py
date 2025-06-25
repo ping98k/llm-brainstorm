@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 load_dotenv()
-import os, json, gradio as gr
+import os, json, re, ast, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from litellm import completion
@@ -18,6 +18,13 @@ def generate_players(instruction, n):
     )
     return [c.message.content.strip() for c in response.choices]
 
+def _clean_json(txt):
+    txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
+    try:
+        return json.loads(txt)
+    except json.JSONDecodeError:
+        return ast.literal_eval(txt)
+
 def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool_size, max_workers):
     instruction = instruction_input.strip()
     criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or ["Factuality", "Instruction Following", "Precision"]
@@ -28,6 +35,7 @@ def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool
     process_log = []
     def log(msg):
         process_log.append(msg)
+        tqdm.write(msg)
         yield "\n".join(process_log), ""
     yield from log("Generating players …")
     all_players = generate_players(instruction, n_gen)
@@ -35,23 +43,22 @@ def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
     def prompt_score(player):
-        prompt = f"""Evaluate the output below on the following criteria:
+        prompt = f"""
+Evaluate the output below on the following criteria:
 {criteria_block()}
 
-Return JSON exactly like: {{\"score\": [{', '.join(['1-10'] * len(criteria_list))}]}}.
+Return JSON exactly like: {{"score": [{', '.join(['1-10'] * len(criteria_list))}]}}.
 
 Instruction:
 {instruction}
 
 Output:
-{player}"""
+{player}
+"""
         response = completion(model="gpt-4o-mini", messages=[{"role": "system", "content": prompt}])
         return response.choices[0].message.content.strip()
     def score(player):
-        try:
-            data = json.loads(prompt_score(player))
-        except json.JSONDecodeError:
-            data = eval(prompt_score(player))
+        data = _clean_json(prompt_score(player))
         lst = data.get("score", data.get("scores", []))
         return sum(lst) / len(lst) if lst else 0.0
     yield from log("Scoring players …")
@@ -60,24 +67,23 @@ Output:
     top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
     yield from log(f"Filtered to {len(top_players)} players with best scores")
     def prompt_play(a, b):
-        prompt = f"""Compare the two players below using:
+        prompt = f"""
+Compare the two players below using:
 {criteria_block()}
 
-Return ONLY JSON {{\"winner\": \"A\"}} or {{\"winner\": \"B\"}}.
+Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}.
 
 Instruction:
 {instruction}
 
 Players:
 <A>{a}</A>
-<B>{b}</B>"""
+<B>{b}</B>
+"""
         response = completion(model="gpt-4o-mini", messages=[{"role": "system", "content": prompt}])
         return response.choices[0].message.content.strip()
     def play(a, b):
-        try:
-            winner_label = json.loads(prompt_play(a, b))["winner"]
-        except json.JSONDecodeError:
-            winner_label = eval(prompt_play(a, b)).get("winner", "A")
+        winner_label = _clean_json(prompt_play(a, b)).get("winner", "A")
         return a if winner_label == "A" else b
     def tournament_round(pairs, executor):
         futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
@@ -93,10 +99,11 @@ Players:
         current = players[:]
         while len(current) > 1:
             pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
-            for w, l in tournament_round(pairs, executor):
+            round_results = tournament_round(pairs, executor)
+            for w, l in round_results:
                 lost_to[l] = w
-            current = [w for w, _ in tournament_round(pairs, executor)]
-            if len(players) % 2 == 1:
+            current = [w for w, _ in round_results]
+            if len(players) % 2 == 1 and players[-1] not in current:
                 current.append(players[-1])
         return current[0], lost_to
     def get_candidates(champion, lost_to):
@@ -113,8 +120,8 @@ Players:
         runner_up = lost_to.get(champion)
         finalists = [champion] + ([runner_up] if runner_up else [])
         semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
-        candidates = set(finalists + semifinalists + get_candidates(champion, lost_to))
-        return playoff(list(candidates), executor)[:num_top_picks]
+        candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
+        return playoff(candidates, executor)[:num_top_picks]
     yield from log("Running tournament …")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         top_k = get_top(top_players, ex)
