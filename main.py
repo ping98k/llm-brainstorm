@@ -1,158 +1,142 @@
-import json
-import os
-import random
+import os, json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-import time
-# Number of top picks to return (default 5)
-NUM_TOP_PICKS = int(os.getenv("NUM_TOP_PICKS", 5))
-# Initial pool size after scoring (default 20)
-POOL_SIZE     = int(os.getenv("POOL_SIZE", 20))
-# Maximum number of worker threads for parallel execution
-MAX_WORKERS   = int(os.getenv("MAX_WORKERS", 10))
-
-# -----------------------------------------------------------------------------
 from litellm import completion
+import gradio as gr
 
-instruction = "tell me story"
+NUM_TOP_PICKS = int(os.getenv("NUM_TOP_PICKS", 5))
+POOL_SIZE = int(os.getenv("POOL_SIZE", 20))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", 10))
 
-# prompt_score: send player to 4o-mini and return raw response content
-# expects model returns something like '{"score": [4,5,6]}'
-def prompt_score(player):
-    response = completion(
-        model="gpt-4o-mini",
-        messages=[{"role": "system", "content":
-f"""Evaluate the output below based on the following criteria: 
-1) Factuality 
-2) Instruction Following 
-3) Precision
 
-Return a JSON object in this format: {{"score": [1–10, 1–10, 1–10]}} — one score for each criterion.
+def run_tournament(instruction_input, criteria_input):
+    instruction = instruction_input.strip()
+    criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or [
+        "Factuality",
+        "Instruction Following",
+        "Precision",
+    ]
 
-Here is the instruction:
+    def criteria_block():
+        return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
+
+    def prompt_score(player):
+        prompt = f"""Evaluate the output below on the following criteria:
+{criteria_block()}
+
+Return JSON exactly like: {{\"score\": [{', '.join(['1-10'] * len(criteria_list))}]}}.
+
+Instruction:
 {instruction}
 
 Output:
-{player}
-""".split()
-                   }]
-    )
-    # extract message text content
-    return response.choices[0].message.content
+{player}"""
+        response = completion(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}],
+        )
+        return response.choices[0].message.content.strip()
 
-# score: Call Litellm (OpenAI 4o-mini) to get a list of scores and return their average.
-# Parses JSON with key "score" or "scores" and computes average.
-def score(player):
-    response = prompt_score(player)
-    try:
-        data = json.loads(response)
-        scores_list = data.get("score", data.get("scores", []))
-    except (json.JSONDecodeError, NameError):
-        # Fallback: eval in safe context
-        data = eval(response)
-        scores_list = data.get("score", data.get("scores", []))
-    if not scores_list:
-        return 0.0
-    return sum(scores_list) / len(scores_list)
+    def score(player):
+        try:
+            data = json.loads(prompt_score(player))
+        except json.JSONDecodeError:
+            data = eval(prompt_score(player))
+        lst = data.get("score", data.get("scores", []))
+        return sum(lst) / len(lst) if lst else 0.0
 
-def play(a, b, scores):
-    # Return 'a' if its score >= b's score, else 'b'
-    return a if scores[a] >= scores[b] else b
+    def prompt_play(a, b):
+        prompt = f"""Compare the two players below using:
+{criteria_block()}
 
-# precompute_scores: Batch parallel scoring of all players.
-# Returns a dict mapping player -> their computed score.
-def precompute_scores(players, executor):
-    """Compute all scores in parallel once and return a dict."""
-    # Submit all score() calls to the executor
-    futures = {executor.submit(score, p): p for p in players}
-    scores = {}
-    # Collect results as they complete
-    for fut in tqdm(as_completed(futures), total=len(futures), desc="Scoring"):
-        p = futures[fut]
-        scores[p] = fut.result()
-    return scores
+Return ONLY JSON {{\"winner\": \"A\"}} or {{\"winner\": \"B\"}}.
 
-# tournament_round: Play one elimination round in parallel.
-# Takes pairs of players, returns a list of (winner, loser) tuples.
-def tournament_round(pairs, executor, scores):
-    """Play a batch of matches in parallel; returns list of (winner, loser)."""
-    futures = {executor.submit(play, a, b, scores): (a, b) for a, b in pairs}
-    results = []
-    # As matches complete, record winners and losers
-    for fut in tqdm(as_completed(futures), total=len(futures),
-                    desc="Tournament round", leave=False):
-        a, b = futures[fut]
-        w = fut.result()
-        loser = b if w == a else a
-        results.append((w, loser))
-    return results
+Instruction:
+{instruction}
 
-# tournament: Run full single-elimination bracket on a player list.
-# Returns the champion and a map of who each loser lost to.
-def tournament(players, executor, scores):
-    lost_to = {}
-    current = players[:]
-    # Continue until only one player remains
-    while len(current) > 1:
-        # Pair off adjacent players
-        pairs = [(current[i], current[i+1]) for i in range(0, len(current)-1, 2)]
-        round_results = tournament_round(pairs, executor, scores)
-        next_round = [w for w, _ in round_results]
-        # Record loss relationships
-        for w, loser in round_results:
-            lost_to[loser] = w
-        # Handle odd player out (bye)
-        if len(current) % 2 == 1:
-            next_round.append(current[-1])
-        current = next_round
-    # Final remaining player is champion
-    return current[0], lost_to
+Players:
+<A>{a}</A>
+<B>{b}</B>"""
+        response = completion(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}],
+        )
+        return response.choices[0].message.content.strip()
 
-# get_candidates: Identify players who lost directly to the champion.
-def get_candidates(champion, lost_to):
-    # Include all who lost to champion + champion itself
-    return [p for p, o in lost_to.items() if o == champion] + [champion]
+    def play(a, b):
+        try:
+            winner_label = json.loads(prompt_play(a, b))["winner"]
+        except json.JSONDecodeError:
+            winner_label = eval(prompt_play(a, b)).get("winner", "A")
+        return a if winner_label == "A" else b
 
-# playoff: Conduct a round-robin among candidates to refine ranking.
-# Returns candidates sorted by number of wins descending.
-def playoff(candidates, executor, scores):
-    wins = {p: 0 for p in candidates}
-    # Generate all unique matchups
-    pairs = [(candidates[i], candidates[j])
-             for i in range(len(candidates)) for j in range(i+1, len(candidates))]
-    futures = {executor.submit(play, a, b, scores): (a, b) for a, b in pairs}
-    # Tally wins as matches complete
-    for fut in tqdm(as_completed(futures), total=len(futures),
-                    desc="Playoff", leave=False):
-        winner = fut.result()
-        wins[winner] += 1
-    # Sort by wins (highest first)
-    return sorted(candidates, key=lambda p: wins[p], reverse=True)
+    def precompute_scores(players, executor):
+        futures = {executor.submit(score, p): p for p in players}
+        scores = {}
+        for fut in tqdm(as_completed(futures), total=len(futures)):
+            scores[futures[fut]] = fut.result()
+        return scores
 
-# get_top: Main orchestration to get top K players.
-# 1) Run tournament to identify top bracket players
-# 2) Gather candidates (champion, runner-up, semifinalists)
-# 3) Conduct playoff to finalize top K ordering
-# Returns a list of top 'k' players.
-def get_top(players, executor, scores, k=NUM_TOP_PICKS):
-    champion, lost_to = tournament(players, executor, scores)
-    runnerup = lost_to.get(champion)
-    finalists = [champion] + ([runnerup] if runnerup else [])
-    semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
-    candidates = set(finalists + semifinalists + get_candidates(champion, lost_to))
-    ranking = playoff(list(candidates), executor, scores)
-    return ranking[:k]
+    def tournament_round(pairs, executor):
+        futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
+        results = []
+        for fut in tqdm(as_completed(futures), total=len(futures)):
+            a, b = futures[fut]
+            winner = fut.result()
+            loser = b if winner == a else a
+            results.append((winner, loser))
+        return results
+
+    def tournament(players, executor):
+        lost_to = {}
+        current = players[:]
+        while len(current) > 1:
+            pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
+            for w, l in tournament_round(pairs, executor):
+                lost_to[l] = w
+            current = [w for w, _ in tournament_round(pairs, executor)]
+            if len(players) % 2 == 1:
+                current.append(players[-1])
+        return current[0], lost_to
+
+    def get_candidates(champion, lost_to):
+        return [p for p, o in lost_to.items() if o == champion] + [champion]
+
+    def playoff(candidates, executor):
+        wins = {p: 0 for p in candidates}
+        pairs = [
+            (candidates[i], candidates[j])
+            for i in range(len(candidates))
+            for j in range(i + 1, len(candidates))
+        ]
+        futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
+        for fut in tqdm(as_completed(futures), total=len(futures)):
+            wins[fut.result()] += 1
+        return sorted(candidates, key=lambda p: wins[p], reverse=True)
+
+    def get_top(players, executor, k=NUM_TOP_PICKS):
+        champion, lost_to = tournament(players, executor)
+        runner_up = lost_to.get(champion)
+        finalists = [champion] + ([runner_up] if runner_up else [])
+        semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
+        candidates = set(finalists + semifinalists + get_candidates(champion, lost_to))
+        return playoff(list(candidates), executor)[:k]
+
+    all_players = [f"S{i}" for i in range(1, 10)]
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        scores = precompute_scores(all_players, ex)
+        top_players = sorted(all_players, key=scores.get, reverse=True)[:POOL_SIZE]
+        top_k = get_top(top_players, ex)
+    return ", ".join(top_k)
+
+demo = gr.Interface(
+    fn=run_tournament,
+    inputs=[
+        gr.Textbox(lines=2, label="Instruction"),
+        gr.Textbox(lines=1, label="Criteria (comma separated)"),
+    ],
+    outputs=gr.Textbox(label="Top picks"),
+)
 
 if __name__ == "__main__":
-    # Create list of 100 players labeled S1..S100
-    all_players = [f"S{i}" for i in range(1, 101)]
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        # 1) Compute scores once
-        scores = precompute_scores(all_players, executor)
-
-        # 2) Select top N players by score
-        top_n_players = sorted(all_players, key=lambda p: scores[p], reverse=True)[:POOL_SIZE]
-
-        # 3) Run optimized tournament + playoff using cached scores
-        top5 = get_top(top_n_players, executor, scores)
-        print("🏆 Top picks:", top5)
+    demo.launch()
