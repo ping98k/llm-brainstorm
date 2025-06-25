@@ -1,9 +1,9 @@
+import json
 import os
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import time
-
 # Number of top picks to return (default 5)
 NUM_TOP_PICKS = int(os.getenv("NUM_TOP_PICKS", 5))
 # Initial pool size after scoring (default 20)
@@ -12,14 +12,49 @@ POOL_SIZE     = int(os.getenv("POOL_SIZE", 20))
 MAX_WORKERS   = int(os.getenv("MAX_WORKERS", 10))
 
 # -----------------------------------------------------------------------------
-# score: Simulate an expensive scoring operation for a player.
-# Sleeps for 5 seconds then returns a random score between 1 and 10.
-def score(player):
-    time.sleep(5)
-    return random.randint(1, 10)
+from litellm import completion
 
-# play: Determine match winner using precomputed scores.
-# Compare two players' scores in O(1) time without additional delays.
+instruction = "tell me story"
+
+# prompt_score: send player to 4o-mini and return raw response content
+# expects model returns something like '{"score": [4,5,6]}'
+def prompt_score(player):
+    response = completion(
+        model="gpt-4o-mini",
+        messages=[{"role": "system", "content":
+f"""Evaluate the output below based on the following criteria: 
+1) Factuality 
+2) Instruction Following 
+3) Precision
+
+Return a JSON object in this format: {{"score": [1–10, 1–10, 1–10]}} — one score for each criterion.
+
+Here is the instruction:
+{instruction}
+
+Output:
+{player}
+""".split()
+                   }]
+    )
+    # extract message text content
+    return response.choices[0].message.content
+
+# score: Call Litellm (OpenAI 4o-mini) to get a list of scores and return their average.
+# Parses JSON with key "score" or "scores" and computes average.
+def score(player):
+    response = prompt_score(player)
+    try:
+        data = json.loads(response)
+        scores_list = data.get("score", data.get("scores", []))
+    except (json.JSONDecodeError, NameError):
+        # Fallback: eval in safe context
+        data = eval(response)
+        scores_list = data.get("score", data.get("scores", []))
+    if not scores_list:
+        return 0.0
+    return sum(scores_list) / len(scores_list)
+
 def play(a, b, scores):
     # Return 'a' if its score >= b's score, else 'b'
     return a if scores[a] >= scores[b] else b
