@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import os, json, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -146,7 +148,7 @@ demo = gr.Interface(
         gr.Textbox(lines=1, label="Criteria (comma separated)"),
         gr.Number(value=NUM_GENERATIONS_DEFAULT, label="Number of Generations"),
         gr.Number(value=NUM_TOP_PICKS_DEFAULT, label="Top Picks (k)"),
-        gr.Number(value=POOL_SIZE_DEFAULT, label="Pool Size"),
+        gr.Number(value=POOL_SIZE_DEFAULT, label="Filter Size"),
         gr.Number(value=MAX_WORKERS_DEFAULT, label="Max Workers")
     ],
     outputs=gr.Textbox(label="Top picks")
