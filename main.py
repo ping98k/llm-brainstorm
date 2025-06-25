@@ -130,8 +130,8 @@ Players:
 demo = gr.Interface(
     fn=run_tournament,
     inputs=[
-        gr.Textbox(lines=2, label="Instruction"),
-        gr.Textbox(lines=1, label="Criteria (comma separated)"),
+        gr.Textbox(lines=10, label="Instruction"),
+        gr.Textbox(lines=5, label="Criteria (comma separated)"),
         gr.Number(value=NUM_GENERATIONS_DEFAULT, label="Number of Generations"),
         gr.Number(value=NUM_TOP_PICKS_DEFAULT, label="Top Picks (k)"),
         gr.Number(value=POOL_SIZE_DEFAULT, label="Filter Size"),
