@@ -6,9 +6,9 @@ from tqdm import tqdm
 from litellm import completion
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 5))
-POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 20))
+POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 10))
 MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 10))
-NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 100))
+NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 20))
 
 def generate_players(instruction, n):
     response = completion(
@@ -139,7 +139,7 @@ demo = gr.Interface(
     ],
     outputs=[
         gr.Textbox(lines=10, label="Process"),
-        gr.Textbox(label="Top picks")
+        gr.Textbox(lines=50, label="Top picks")
     ]
 )
 
