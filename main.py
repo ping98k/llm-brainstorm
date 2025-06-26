@@ -127,7 +127,6 @@ def run_tournament(
                 return sum(vals) / len(vals) if vals else 0.0
             return float(data.get("score", 0))
 
-        yield from log("Scoring players …")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             scores = {
                 p: s
@@ -205,7 +204,6 @@ def run_tournament(
             candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
             return playoff(candidates, executor)[:num_top_picks]
 
-        yield from log("Running tournament …")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             top_k = get_top(top_players, ex)
     else:
