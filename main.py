@@ -181,13 +181,14 @@ def run_tournament(
             lost_to = {}
             current = players[:]
             while len(current) > 1:
+                leftover = current[-1] if len(current) % 2 == 1 else None
                 pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
                 round_results = tournament_round(pairs, executor)
                 for w, l in round_results:
                     lost_to[l] = w
                 current = [w for w, _ in round_results]
-                if len(players) % 2 == 1 and players[-1] not in current:
-                    current.append(players[-1])
+                if leftover:
+                    current.append(leftover)
             return current[0], lost_to
 
         def get_candidates(champion, lost_to):
