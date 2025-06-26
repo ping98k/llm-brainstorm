@@ -61,35 +61,67 @@ def run_tournament(
     process_log = []
     hist_fig = None
     top_picks_str = ""
+    prompt_tokens = 0
+    completion_tokens = 0
+
+    def add_usage(usage):
+        nonlocal prompt_tokens, completion_tokens
+        if not usage:
+            return
+        pt = getattr(usage, "prompt_tokens", None)
+        if pt is None and isinstance(usage, dict):
+            pt = usage.get("prompt_tokens")
+        ct = getattr(usage, "completion_tokens", None)
+        if ct is None and isinstance(usage, dict):
+            ct = usage.get("completion_tokens")
+        if pt:
+            prompt_tokens += pt
+        if ct:
+            completion_tokens += ct
+
+    def usage_str():
+        return (
+            f"Prompt tokens: {prompt_tokens}\n"
+            f"Completion tokens: {completion_tokens}\n"
+            f"Total tokens: {prompt_tokens + completion_tokens}"
+        )
     def log(msg):
         process_log.append(msg)
         tqdm.write(msg)
-        yield "\n".join(process_log), hist_fig, top_picks_str
+        yield "\n".join(process_log), hist_fig, top_picks_str, usage_str()
     yield from log("Generating players …")
-    all_players = generate_players(
+    all_players, usage = generate_players(
         instruction,
         n_gen,
         model=generate_model,
         api_base=api_base,
         api_key=api_token,
+        return_usage=True,
     )
+    add_usage(usage)
     yield from log(f"{len(all_players)} players generated")
+    for i, p in enumerate(all_players, 1):
+        disp = p.replace("\n", " ")
+        if len(disp) > 100:
+            disp = disp[:100] + "…"
+        yield from log(f"Completion {i}: {disp}")
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
 
     if enable_score_filter:
         def score(player):
-            data = _clean_json(
-                prompt_score(
-                    instruction,
-                    criteria_list,
-                    criteria_block(),
-                    player,
-                    model=score_model,
-                    api_base=api_base,
-                    api_key=api_token,
-                )
+            text, usage = prompt_score(
+                instruction,
+                criteria_list,
+                criteria_block(),
+                player,
+                model=score_model,
+                api_base=api_base,
+                api_key=api_token,
+                return_usage=True,
             )
+            add_usage(usage)
+            data = _clean_json(text)
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
                 return sum(vals) / len(vals) if vals else 0.0
@@ -113,17 +145,18 @@ def run_tournament(
         top_players = all_players
     if enable_pairwise_filter:
         def play(a, b):
-            winner_label = _clean_json(
-                prompt_pairwise(
-                    instruction,
-                    criteria_block(),
-                    a,
-                    b,
-                    model=pairwise_model,
-                    api_base=api_base,
-                    api_key=api_token,
-                )
-            ).get("winner", "A")
+            text, usage = prompt_pairwise(
+                instruction,
+                criteria_block(),
+                a,
+                b,
+                model=pairwise_model,
+                api_base=api_base,
+                api_key=api_token,
+                return_usage=True,
+            )
+            add_usage(usage)
+            winner_label = _clean_json(text).get("winner", "A")
             return a if winner_label == "A" else b
 
         def tournament_round(pairs, executor):
@@ -178,7 +211,7 @@ def run_tournament(
     else:
         top_k = top_players[:num_top_picks]
     top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
-    yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str
+    yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str, usage_str()
 
 demo = gr.Interface(
     fn=run_tournament,
@@ -201,6 +234,7 @@ demo = gr.Interface(
         gr.Textbox(lines=10, label="Process"),
         gr.Plot(label="Score Distribution"),
         gr.Textbox(lines=50, label="Top picks"),
+        gr.Textbox(lines=5, label="Token Usage"),
     ],
     description="Generate multiple completions and use score and pairwise filters to find the best answers.",
 )
