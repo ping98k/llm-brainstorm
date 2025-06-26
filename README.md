@@ -11,6 +11,9 @@ This project provides a small interface for running "tournaments" between langua
    - `NUM_GENERATIONS`
    - `OPENAI_API_BASE`
    - `OPENAI_API_KEY`
+   - `GENERATE_MODEL`
+   - `SCORE_MODEL`
+   - `PAIRWISE_MODEL`
    - `ENABLE_SCORE_FILTER`
    - `ENABLE_PAIRWISE_FILTER`
 2. Install dependencies (example with `pip`):
