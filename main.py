@@ -61,9 +61,13 @@ def run_tournament(
 
     if enable_score_filter:
         def score(player):
-            data = _clean_json(prompt_score(instruction, criteria_block(), player))
-            lst = data.get("score", data.get("scores", []))
-            return sum(lst) / len(lst) if lst else 0.0
+            data = _clean_json(
+                prompt_score(instruction, criteria_block(), player)
+            )
+            if "scores" in data and isinstance(data["scores"], list):
+                vals = data["scores"]
+                return sum(vals) / len(vals) if vals else 0.0
+            return float(data.get("score", 0))
 
         yield from log("Scoring players …")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
