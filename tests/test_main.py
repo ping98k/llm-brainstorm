@@ -108,6 +108,8 @@ def test_run_tournament_full_loop():
     assert hist_fig == 'fig'
     assert top_picks.strip() in {'p1', 'p2'}
     mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k', return_usage=True)
+    assert 'Score completion' in process_log
+    assert 'Pairwise completion' in process_log
     assert 'Prompt tokens' in usage
     assert mock_score.call_count == 4
     assert mock_pair.called

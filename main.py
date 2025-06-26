@@ -63,6 +63,8 @@ def run_tournament(
     top_picks_str = ""
     prompt_tokens = 0
     completion_tokens = 0
+    score_outputs: list[str] = []
+    pairwise_outputs: list[str] = []
 
     def add_usage(usage):
         nonlocal prompt_tokens, completion_tokens
@@ -85,6 +87,12 @@ def run_tournament(
             f"Completion tokens: {completion_tokens}\n"
             f"Total tokens: {prompt_tokens + completion_tokens}"
         )
+
+    def log_completion(prefix: str, text: str):
+        disp = text.replace("\n", " ")
+        if len(disp) > 100:
+            disp = disp[:100] + "…"
+        return log(f"{prefix}{disp}")
     def log(msg):
         process_log.append(msg)
         tqdm.write(msg)
@@ -101,10 +109,7 @@ def run_tournament(
     add_usage(usage)
     yield from log(f"{len(all_players)} players generated")
     for i, p in enumerate(all_players, 1):
-        disp = p.replace("\n", " ")
-        if len(disp) > 100:
-            disp = disp[:100] + "…"
-        yield from log(f"Completion {i}: {disp}")
+        yield from log_completion(f"Completion {i}: ", p)
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
 
@@ -121,6 +126,7 @@ def run_tournament(
                 return_usage=True,
             )
             add_usage(usage)
+            score_outputs.append(text)
             data = _clean_json(text)
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
@@ -140,6 +146,8 @@ def run_tournament(
         yield from log("Histogram generated")
         top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
         yield from log(f"Filtered to {len(top_players)} players with best scores")
+        for i, txt in enumerate(score_outputs, 1):
+            yield from log_completion(f"Score completion {i}: ", txt)
     else:
         top_players = all_players
     if enable_pairwise_filter:
@@ -155,6 +163,7 @@ def run_tournament(
                 return_usage=True,
             )
             add_usage(usage)
+            pairwise_outputs.append(text)
             winner_label = _clean_json(text).get("winner", "A")
             return a if winner_label == "A" else b
 
@@ -206,6 +215,8 @@ def run_tournament(
 
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             top_k = get_top(top_players, ex)
+        for i, txt in enumerate(pairwise_outputs, 1):
+            yield from log_completion(f"Pairwise completion {i}: ", txt)
     else:
         top_k = top_players[:num_top_picks]
     top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
