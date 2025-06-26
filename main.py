@@ -62,7 +62,7 @@ def run_tournament(
     if enable_score_filter:
         def score(player):
             data = _clean_json(
-                prompt_score(instruction, criteria_block(), player)
+                prompt_score(instruction, criteria_list, criteria_block(), player)
             )
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
