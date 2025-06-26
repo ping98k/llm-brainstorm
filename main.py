@@ -6,10 +6,14 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from tournament_utils import generate_players, prompt_score, prompt_play
 
-NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 5))
-POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 10))
+NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 3))
+POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 5))
 MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 10))
-NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 20))
+NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 10))
+API_BASE_DEFAULT = os.getenv("OPENAI_API_BASE", "")
+API_TOKEN_DEFAULT = os.getenv("OPENAI_API_KEY", "")
+SCORE_FILTER_DEFAULT = os.getenv("ENABLE_SCORE_FILTER", "true").lower() == "true"
+PAIRWISE_FILTER_DEFAULT = os.getenv("ENABLE_PAIRWISE_FILTER", "true").lower() == "true"
 
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
@@ -18,13 +22,30 @@ def _clean_json(txt):
     except json.JSONDecodeError:
         return ast.literal_eval(txt)
 
-def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool_size, max_workers):
+def run_tournament(
+    api_base,
+    api_token,
+    instruction_input,
+    criteria_input,
+    n_gen,
+    pool_size,
+    num_top_picks,
+    max_workers,
+    enable_score_filter,
+    enable_pairwise_filter,
+):
     instruction = instruction_input.strip()
     criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or ["Factuality", "Instruction Following", "Precision"]
     n_gen = int(n_gen)
     num_top_picks = int(num_top_picks)
     pool_size = int(pool_size)
     max_workers = int(max_workers)
+    if api_base:
+        os.environ["OPENAI_API_BASE"] = api_base
+    if api_token:
+        os.environ["OPENAI_API_KEY"] = api_token
+    enable_score_filter = bool(enable_score_filter)
+    enable_pairwise_filter = bool(enable_pairwise_filter)
     process_log = []
     hist_fig = None
     top_picks_str = ""
@@ -38,81 +59,113 @@ def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
 
-    def score(player):
-        data = _clean_json(prompt_score(instruction, criteria_block(), player))
-        lst = data.get("score", data.get("scores", []))
-        return sum(lst) / len(lst) if lst else 0.0
-    yield from log("Scoring players …")
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        scores = {p: s for p, s in zip(all_players, list(tqdm(ex.map(score, all_players), total=len(all_players))))}
-    hist_fig = plt.figure()
-    plt.hist(list(scores.values()), bins=10)
-    yield from log("Histogram generated")
-    top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
-    yield from log(f"Filtered to {len(top_players)} players with best scores")
-    def play(a, b):
-        winner_label = _clean_json(
-            prompt_play(instruction, criteria_block(), a, b)
-        ).get("winner", "A")
-        return a if winner_label == "A" else b
-    def tournament_round(pairs, executor):
-        futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
-        results = []
-        for fut in tqdm(as_completed(futures), total=len(futures)):
-            a, b = futures[fut]
-            winner = fut.result()
-            loser = b if winner == a else a
-            results.append((winner, loser))
-        return results
-    def tournament(players, executor):
-        lost_to = {}
-        current = players[:]
-        while len(current) > 1:
-            pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
-            round_results = tournament_round(pairs, executor)
-            for w, l in round_results:
-                lost_to[l] = w
-            current = [w for w, _ in round_results]
-            if len(players) % 2 == 1 and players[-1] not in current:
-                current.append(players[-1])
-        return current[0], lost_to
-    def get_candidates(champion, lost_to):
-        return [p for p, o in lost_to.items() if o == champion] + [champion]
-    def playoff(candidates, executor):
-        wins = {p: 0 for p in candidates}
-        pairs = [(candidates[i], candidates[j]) for i in range(len(candidates)) for j in range(i + 1, len(candidates))]
-        futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
-        for fut in tqdm(as_completed(futures), total=len(futures)):
-            wins[fut.result()] += 1
-        return sorted(candidates, key=lambda p: wins[p], reverse=True)
-    def get_top(players, executor):
-        champion, lost_to = tournament(players, executor)
-        runner_up = lost_to.get(champion)
-        finalists = [champion] + ([runner_up] if runner_up else [])
-        semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
-        candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
-        return playoff(candidates, executor)[:num_top_picks]
-    yield from log("Running tournament …")
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        top_k = get_top(top_players, ex)
+    if enable_score_filter:
+        def score(player):
+            data = _clean_json(
+                prompt_score(instruction, criteria_list, criteria_block(), player)
+            )
+            if "scores" in data and isinstance(data["scores"], list):
+                vals = data["scores"]
+                return sum(vals) / len(vals) if vals else 0.0
+            return float(data.get("score", 0))
+
+        yield from log("Scoring players …")
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            scores = {
+                p: s
+                for p, s in zip(
+                    all_players,
+                    list(tqdm(ex.map(score, all_players), total=len(all_players))),
+                )
+            }
+        hist_fig = plt.figure()
+        plt.hist(list(scores.values()), bins=10)
+        yield from log("Histogram generated")
+        top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
+        yield from log(f"Filtered to {len(top_players)} players with best scores")
+    else:
+        top_players = all_players
+    if enable_pairwise_filter:
+        def play(a, b):
+            winner_label = _clean_json(
+                prompt_play(instruction, criteria_block(), a, b)
+            ).get("winner", "A")
+            return a if winner_label == "A" else b
+
+        def tournament_round(pairs, executor):
+            futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
+            results = []
+            for fut in tqdm(as_completed(futures), total=len(futures)):
+                a, b = futures[fut]
+                winner = fut.result()
+                loser = b if winner == a else a
+                results.append((winner, loser))
+            return results
+
+        def tournament(players, executor):
+            lost_to = {}
+            current = players[:]
+            while len(current) > 1:
+                pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
+                round_results = tournament_round(pairs, executor)
+                for w, l in round_results:
+                    lost_to[l] = w
+                current = [w for w, _ in round_results]
+                if len(players) % 2 == 1 and players[-1] not in current:
+                    current.append(players[-1])
+            return current[0], lost_to
+
+        def get_candidates(champion, lost_to):
+            return [p for p, o in lost_to.items() if o == champion] + [champion]
+
+        def playoff(candidates, executor):
+            wins = {p: 0 for p in candidates}
+            pairs = [
+                (candidates[i], candidates[j])
+                for i in range(len(candidates))
+                for j in range(i + 1, len(candidates))
+            ]
+            futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
+            for fut in tqdm(as_completed(futures), total=len(futures)):
+                wins[fut.result()] += 1
+            return sorted(candidates, key=lambda p: wins[p], reverse=True)
+
+        def get_top(players, executor):
+            champion, lost_to = tournament(players, executor)
+            runner_up = lost_to.get(champion)
+            finalists = [champion] + ([runner_up] if runner_up else [])
+            semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
+            candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
+            return playoff(candidates, executor)[:num_top_picks]
+
+        yield from log("Running tournament …")
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            top_k = get_top(top_players, ex)
+    else:
+        top_k = top_players[:num_top_picks]
     top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
     yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str
 
 demo = gr.Interface(
     fn=run_tournament,
     inputs=[
+        gr.Textbox(value=API_BASE_DEFAULT, label="API Base Path"),
+        gr.Textbox(value="", label="API Token", type="password"),
         gr.Textbox(lines=10, label="Instruction"),
         gr.Textbox(lines=5, label="Criteria (comma separated)"),
         gr.Number(value=NUM_GENERATIONS_DEFAULT, label="Number of Generations"),
-        gr.Number(value=NUM_TOP_PICKS_DEFAULT, label="Top Picks (k)"),
-        gr.Number(value=POOL_SIZE_DEFAULT, label="Filter Size"),
-        gr.Number(value=MAX_WORKERS_DEFAULT, label="Max Workers")
+        gr.Number(value=POOL_SIZE_DEFAULT, label="Top Picks Score Filter"),
+        gr.Number(value=NUM_TOP_PICKS_DEFAULT, label="Top Picks Pairwise"),
+        gr.Number(value=MAX_WORKERS_DEFAULT, label="Max Workers"),
+        gr.Checkbox(value=SCORE_FILTER_DEFAULT, label="Enable Score Filter"),
+        gr.Checkbox(value=PAIRWISE_FILTER_DEFAULT, label="Enable Pairwise Filter"),
     ],
     outputs=[
         gr.Textbox(lines=10, label="Process"),
         gr.Plot(label="Score Distribution"),
-        gr.Textbox(lines=50, label="Top picks")
-    ]
+        gr.Textbox(lines=50, label="Top picks"),
+    ],
+    description="Generate multiple completions and use score and pairwise filters to find the best answers.",
 )
 
 if __name__ == "__main__":

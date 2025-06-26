@@ -11,12 +11,19 @@ def generate_players(instruction: str, n: int, model: str = "gpt-4o-mini"):
     return [c.message.content.strip() for c in response.choices]
 
 
-def prompt_score(instruction: str, criteria_block: str, player: str, model: str = "gpt-4o-mini") -> str:
+def prompt_score(
+    instruction: str,
+    criteria_list: list[str],
+    criteria_block: str,
+    player: str,
+    model: str = "gpt-4o-mini",
+) -> str:
     """Return a JSON score string evaluating `player` on the criteria."""
+    example_scores = ", ".join(["1-10"] * len(criteria_list)) or "1-10"
     prompt = f"""Evaluate the output below on the following criteria:
 {criteria_block}
 
-Return JSON exactly like: {{"score": [1-10]}}.
+Return JSON exactly like: {{"scores": [{example_scores}]}}.
 
 Instruction:
 {instruction}

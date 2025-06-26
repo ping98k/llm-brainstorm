@@ -9,6 +9,10 @@ This project provides a small interface for running "tournaments" between langua
    - `POOL_SIZE`
    - `MAX_WORKERS`
    - `NUM_GENERATIONS`
+   - `OPENAI_API_BASE`
+   - `OPENAI_API_KEY`
+   - `ENABLE_SCORE_FILTER`
+   - `ENABLE_PAIRWISE_FILTER`
 2. Install dependencies (example with `pip`):
    ```bash
    pip install gradio litellm python-dotenv tqdm matplotlib
@@ -17,7 +21,7 @@ This project provides a small interface for running "tournaments" between langua
    ```bash
    python main.py
    ```
-4. Open the displayed local URL to provide an instruction and evaluation criteria.
+4. Open the displayed local URL. At the top of the page you can optionally override the API base path and token (the token field is blank by default). Additional settings let you configure score and pairwise filtering.
 
-The interface will generate multiple answers, score them, and run a head-to-head tournament to find the best outputs.
+The interface will generate multiple answers, optionally filter them by score and run a pairwise tournament to select the best outputs.
 
