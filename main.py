@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv("./local.env")
 import os, json, re, ast, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -61,47 +61,84 @@ def run_tournament(
     process_log = []
     hist_fig = None
     top_picks_str = ""
+    prompt_tokens = 0
+    completion_tokens = 0
+    score_outputs: list[str] = []
+    pairwise_outputs: list[str] = []
+
+    def add_usage(usage):
+        nonlocal prompt_tokens, completion_tokens
+        if not usage:
+            return
+        pt = getattr(usage, "prompt_tokens", None)
+        if pt is None and isinstance(usage, dict):
+            pt = usage.get("prompt_tokens")
+        ct = getattr(usage, "completion_tokens", None)
+        if ct is None and isinstance(usage, dict):
+            ct = usage.get("completion_tokens")
+        if pt:
+            prompt_tokens += pt
+        if ct:
+            completion_tokens += ct
+
+    def usage_str():
+        return (
+            f"Prompt tokens: {prompt_tokens}\n"
+            f"Completion tokens: {completion_tokens}\n"
+            f"Total tokens: {prompt_tokens + completion_tokens}"
+        )
+
+    def log_completion(prefix: str, text: str):
+        disp = text.replace("\n", " ")
+        if len(disp) > 100:
+            disp = disp[:100] + "…"
+        return log(f"{prefix}{disp}")
     def log(msg):
         process_log.append(msg)
         tqdm.write(msg)
-        yield "\n".join(process_log), hist_fig, top_picks_str
+        yield "\n".join(process_log), hist_fig, top_picks_str, usage_str()
     yield from log("Generating players …")
-    all_players = generate_players(
+    all_players, usage = generate_players(
         instruction,
         n_gen,
         model=generate_model,
         api_base=api_base,
         api_key=api_token,
+        return_usage=True,
     )
+    add_usage(usage)
     yield from log(f"{len(all_players)} players generated")
+    for i, p in enumerate(all_players, 1):
+        yield from log_completion(f"Completion {i}: ", p)
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
 
     if enable_score_filter:
         def score(player):
-            data = _clean_json(
-                prompt_score(
-                    instruction,
-                    criteria_list,
-                    criteria_block(),
-                    player,
-                    model=score_model,
-                    api_base=api_base,
-                    api_key=api_token,
-                )
+            text, usage = prompt_score(
+                instruction,
+                criteria_list,
+                criteria_block(),
+                player,
+                model=score_model,
+                api_base=api_base,
+                api_key=api_token,
+                return_usage=True,
             )
+            add_usage(usage)
+            score_outputs.append(text)
+            data = _clean_json(text)
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
                 return sum(vals) / len(vals) if vals else 0.0
             return float(data.get("score", 0))
 
-        yield from log("Scoring players …")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             scores = {
                 p: s
                 for p, s in zip(
                     all_players,
-                    list(tqdm(ex.map(score, all_players), total=len(all_players))),
+                    tqdm(ex.map(score, all_players), total=len(all_players)),
                 )
             }
         hist_fig = plt.figure()
@@ -109,21 +146,25 @@ def run_tournament(
         yield from log("Histogram generated")
         top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
         yield from log(f"Filtered to {len(top_players)} players with best scores")
+        for i, txt in enumerate(score_outputs, 1):
+            yield from log_completion(f"Score completion {i}: ", txt)
     else:
         top_players = all_players
     if enable_pairwise_filter:
         def play(a, b):
-            winner_label = _clean_json(
-                prompt_pairwise(
-                    instruction,
-                    criteria_block(),
-                    a,
-                    b,
-                    model=pairwise_model,
-                    api_base=api_base,
-                    api_key=api_token,
-                )
-            ).get("winner", "A")
+            text, usage = prompt_pairwise(
+                instruction,
+                criteria_block(),
+                a,
+                b,
+                model=pairwise_model,
+                api_base=api_base,
+                api_key=api_token,
+                return_usage=True,
+            )
+            add_usage(usage)
+            pairwise_outputs.append(text)
+            winner_label = _clean_json(text).get("winner", "A")
             return a if winner_label == "A" else b
 
         def tournament_round(pairs, executor):
@@ -172,13 +213,14 @@ def run_tournament(
             candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
             return playoff(candidates, executor)[:num_top_picks]
 
-        yield from log("Running tournament …")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             top_k = get_top(top_players, ex)
+        for i, txt in enumerate(pairwise_outputs, 1):
+            yield from log_completion(f"Pairwise completion {i}: ", txt)
     else:
         top_k = top_players[:num_top_picks]
     top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
-    yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str
+    yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str, usage_str()
 
 demo = gr.Interface(
     fn=run_tournament,
@@ -201,6 +243,7 @@ demo = gr.Interface(
         gr.Textbox(lines=10, label="Process"),
         gr.Plot(label="Score Distribution"),
         gr.Textbox(lines=50, label="Top picks"),
+        gr.Textbox(lines=5, label="Token Usage"),
     ],
     description="Generate multiple completions and use score and pairwise filters to find the best answers.",
 )
