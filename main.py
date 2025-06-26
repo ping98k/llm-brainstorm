@@ -6,10 +6,10 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from tournament_utils import generate_players, prompt_score, prompt_play
 
-NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 5))
-POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 10))
+NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 3))
+POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 5))
 MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 10))
-NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 20))
+NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 10))
 API_BASE_DEFAULT = os.getenv("OPENAI_API_BASE", "")
 API_TOKEN_DEFAULT = os.getenv("OPENAI_API_KEY", "")
 SCORE_FILTER_DEFAULT = os.getenv("ENABLE_SCORE_FILTER", "true").lower() == "true"

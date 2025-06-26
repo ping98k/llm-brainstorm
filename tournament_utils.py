@@ -23,7 +23,7 @@ def prompt_score(
     prompt = f"""Evaluate the output below on the following criteria:
 {criteria_block}
 
-Return JSON exactly like: {{"score": [{example_scores}]}}.
+Return JSON exactly like: {{"scores": [{example_scores}]}}.
 
 Instruction:
 {instruction}
