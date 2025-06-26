@@ -113,3 +113,37 @@ def test_run_tournament_full_loop():
     assert 'Prompt tokens' in usage
     assert mock_score.call_count == 4
     assert mock_pair.called
+
+
+def test_run_tournament_pairwise_odd_players():
+    dummy_tqdm = DummyTqdm()
+    with patch('main.generate_players') as mock_gen, \
+         patch('main.prompt_pairwise') as mock_pair, \
+         patch('main.ThreadPoolExecutor', return_value=DummyExecutor()) as MockEx, \
+         patch('main.as_completed', new=lambda futs: futs), \
+         patch('main.tqdm', new=dummy_tqdm), \
+         patch('main.plt.figure', return_value='fig'), \
+         patch('main.plt.hist'):
+        mock_gen.return_value = (['p1', 'p2', 'p3'], {'prompt_tokens':1,'completion_tokens':1})
+        mock_pair.side_effect = lambda instr, block, a, b, **kw: (json.dumps({'winner':'A'}), {'prompt_tokens':1,'completion_tokens':1})
+
+        results = list(main.run_tournament(
+            api_base='b',
+            api_token='k',
+            generate_model='gm',
+            score_model='sm',
+            pairwise_model='pm',
+            instruction_input='instr',
+            criteria_input='c1,c2',
+            n_gen=3,
+            pool_size=3,
+            num_top_picks=1,
+            max_workers=1,
+            enable_score_filter=False,
+            enable_pairwise_filter=True,
+        ))
+
+    process_log, fig, top_picks, usage = results[-1]
+    assert 'Done' in process_log
+    assert top_picks.strip() in {'p1', 'p2', 'p3'}
+    assert mock_pair.call_count == 5
