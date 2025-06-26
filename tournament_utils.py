@@ -18,15 +18,23 @@ def generate_players(
     *,
     api_base: str | None = None,
     api_key: str | None = None,
-):
-    """Request `n` completions for the instruction using the given model."""
+    return_usage: bool = False,
+) -> list[str] | tuple[list[str], object]:
+    """Request ``n`` completions for the instruction using the given model.
+
+    When ``return_usage`` is ``True`` the ``usage`` object from the completion
+    response is also returned.
+    """
     response = completion(
         model=model,
         messages=[{"role": "user", "content": instruction}],
         n=n,
         **_completion_kwargs(api_base, api_key),
     )
-    return [c.message.content.strip() for c in response.choices]
+    players = [c.message.content.strip() for c in response.choices]
+    if return_usage:
+        return players, getattr(response, "usage", None)
+    return players
 
 
 def prompt_score(
@@ -38,7 +46,8 @@ def prompt_score(
     *,
     api_base: str | None = None,
     api_key: str | None = None,
-) -> str:
+    return_usage: bool = False,
+) -> str | tuple[str, object]:
     """Return a JSON score string evaluating `player` on the criteria."""
     example_scores = ", ".join(["1-10"] * len(criteria_list)) or "1-10"
     prompt = f"""Evaluate the output below on the following criteria:
@@ -56,7 +65,10 @@ Output:
         messages=[{"role": "system", "content": prompt}],
         **_completion_kwargs(api_base, api_key),
     )
-    return response.choices[0].message.content.strip()
+    text = response.choices[0].message.content.strip()
+    if return_usage:
+        return text, getattr(response, "usage", None)
+    return text
 
 
 def prompt_pairwise(
@@ -68,7 +80,8 @@ def prompt_pairwise(
     *,
     api_base: str | None = None,
     api_key: str | None = None,
-) -> str:
+    return_usage: bool = False,
+) -> str | tuple[str, object]:
     """Return which player wins in JSON using the given criteria."""
     prompt = f"""Compare the two players below using:
 {criteria_block}
@@ -86,4 +99,7 @@ Players:
         messages=[{"role": "system", "content": prompt}],
         **_completion_kwargs(api_base, api_key),
     )
-    return response.choices[0].message.content.strip()
+    text = response.choices[0].message.content.strip()
+    if return_usage:
+        return text, getattr(response, "usage", None)
+    return text

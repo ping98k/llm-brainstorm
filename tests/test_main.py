@@ -82,10 +82,10 @@ def test_run_tournament_full_loop():
          patch('main.tqdm', new=dummy_tqdm), \
          patch('main.plt.figure', return_value='fig'), \
          patch('main.plt.hist'):
-        mock_gen.return_value = ['p1', 'p2', 'p3', 'p4']
+        mock_gen.return_value = (['p1', 'p2', 'p3', 'p4'], {'prompt_tokens':1,'completion_tokens':1})
         scores = {'p1':3, 'p2':2, 'p3':1, 'p4':0}
-        mock_score.side_effect = lambda instr, cl, block, player, **kw: json.dumps({'score': scores[player]})
-        mock_pair.side_effect = lambda instr, block, a, b, **kw: json.dumps({'winner': 'A'})
+        mock_score.side_effect = lambda instr, cl, block, player, **kw: (json.dumps({'score': scores[player]}), {'prompt_tokens':1,'completion_tokens':1})
+        mock_pair.side_effect = lambda instr, block, a, b, **kw: (json.dumps({'winner': 'A'}), {'prompt_tokens':1,'completion_tokens':1})
 
         results = list(main.run_tournament(
             api_base='b',
@@ -103,10 +103,13 @@ def test_run_tournament_full_loop():
             enable_pairwise_filter=True,
         ))
 
-    process_log, hist_fig, top_picks = results[-1]
+    process_log, hist_fig, top_picks, usage = results[-1]
     assert 'Done' in process_log
     assert hist_fig == 'fig'
     assert top_picks.strip() in {'p1', 'p2'}
-    mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k')
+    mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k', return_usage=True)
+    assert 'Score completion' in process_log
+    assert 'Pairwise completion' in process_log
+    assert 'Prompt tokens' in usage
     assert mock_score.call_count == 4
     assert mock_pair.called
