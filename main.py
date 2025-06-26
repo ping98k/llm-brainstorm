@@ -3,21 +3,13 @@ load_dotenv()
 import os, json, re, ast, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from litellm import completion
 import matplotlib.pyplot as plt
+from tournament_utils import generate_players, prompt_score, prompt_play
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 5))
 POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 10))
 MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 10))
 NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 20))
-
-def generate_players(instruction, n):
-    response = completion(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": instruction}],
-        n=n
-    )
-    return [c.message.content.strip() for c in response.choices]
 
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
@@ -45,23 +37,9 @@ def run_tournament(instruction_input, criteria_input, n_gen, num_top_picks, pool
     yield from log(f"{len(all_players)} players generated")
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
-    def prompt_score(player):
-        prompt = f"""
-Evaluate the output below on the following criteria:
-{criteria_block()}
 
-Return JSON exactly like: {{"score": [{', '.join(['1-10'] * len(criteria_list))}]}}.
-
-Instruction:
-{instruction}
-
-Output:
-{player}
-"""
-        response = completion(model="gpt-4o-mini", messages=[{"role": "system", "content": prompt}])
-        return response.choices[0].message.content.strip()
     def score(player):
-        data = _clean_json(prompt_score(player))
+        data = _clean_json(prompt_score(instruction, criteria_block(), player))
         lst = data.get("score", data.get("scores", []))
         return sum(lst) / len(lst) if lst else 0.0
     yield from log("Scoring players …")
@@ -72,24 +50,10 @@ Output:
     yield from log("Histogram generated")
     top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
     yield from log(f"Filtered to {len(top_players)} players with best scores")
-    def prompt_play(a, b):
-        prompt = f"""
-Compare the two players below using:
-{criteria_block()}
-
-Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}.
-
-Instruction:
-{instruction}
-
-Players:
-<A>{a}</A>
-<B>{b}</B>
-"""
-        response = completion(model="gpt-4o-mini", messages=[{"role": "system", "content": prompt}])
-        return response.choices[0].message.content.strip()
     def play(a, b):
-        winner_label = _clean_json(prompt_play(a, b)).get("winner", "A")
+        winner_label = _clean_json(
+            prompt_play(instruction, criteria_block(), a, b)
+        ).get("winner", "A")
         return a if winner_label == "A" else b
     def tournament_round(pairs, executor):
         futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
