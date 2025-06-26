@@ -4,7 +4,7 @@ import os, json, re, ast, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from tournament_utils import generate_players, prompt_score, prompt_play
+from tournament_utils import generate_players, prompt_score, prompt_pairwise
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 3))
 POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 5))
@@ -14,6 +14,9 @@ API_BASE_DEFAULT = os.getenv("OPENAI_API_BASE", "")
 API_TOKEN_DEFAULT = os.getenv("OPENAI_API_KEY", "")
 SCORE_FILTER_DEFAULT = os.getenv("ENABLE_SCORE_FILTER", "true").lower() == "true"
 PAIRWISE_FILTER_DEFAULT = os.getenv("ENABLE_PAIRWISE_FILTER", "true").lower() == "true"
+GENERATE_MODEL_DEFAULT = os.getenv("GENERATE_MODEL", "gpt-4o-mini")
+SCORE_MODEL_DEFAULT = os.getenv("SCORE_MODEL", "gpt-4o-mini")
+PAIRWISE_MODEL_DEFAULT = os.getenv("PAIRWISE_MODEL", "gpt-4o-mini")
 
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
@@ -25,6 +28,9 @@ def _clean_json(txt):
 def run_tournament(
     api_base,
     api_token,
+    generate_model,
+    score_model,
+    pairwise_model,
     instruction_input,
     criteria_input,
     n_gen,
@@ -40,10 +46,16 @@ def run_tournament(
     num_top_picks = int(num_top_picks)
     pool_size = int(pool_size)
     max_workers = int(max_workers)
-    if api_base:
-        os.environ["OPENAI_API_BASE"] = api_base
-    if api_token:
-        os.environ["OPENAI_API_KEY"] = api_token
+    if not api_base:
+        api_base = API_BASE_DEFAULT
+    if not api_token:
+        api_token = API_TOKEN_DEFAULT
+    if not generate_model:
+        generate_model = GENERATE_MODEL_DEFAULT
+    if not score_model:
+        score_model = SCORE_MODEL_DEFAULT
+    if not pairwise_model:
+        pairwise_model = PAIRWISE_MODEL_DEFAULT
     enable_score_filter = bool(enable_score_filter)
     enable_pairwise_filter = bool(enable_pairwise_filter)
     process_log = []
@@ -54,7 +66,13 @@ def run_tournament(
         tqdm.write(msg)
         yield "\n".join(process_log), hist_fig, top_picks_str
     yield from log("Generating players …")
-    all_players = generate_players(instruction, n_gen)
+    all_players = generate_players(
+        instruction,
+        n_gen,
+        model=generate_model,
+        api_base=api_base,
+        api_key=api_token,
+    )
     yield from log(f"{len(all_players)} players generated")
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
@@ -62,7 +80,15 @@ def run_tournament(
     if enable_score_filter:
         def score(player):
             data = _clean_json(
-                prompt_score(instruction, criteria_list, criteria_block(), player)
+                prompt_score(
+                    instruction,
+                    criteria_list,
+                    criteria_block(),
+                    player,
+                    model=score_model,
+                    api_base=api_base,
+                    api_key=api_token,
+                )
             )
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
@@ -88,7 +114,15 @@ def run_tournament(
     if enable_pairwise_filter:
         def play(a, b):
             winner_label = _clean_json(
-                prompt_play(instruction, criteria_block(), a, b)
+                prompt_pairwise(
+                    instruction,
+                    criteria_block(),
+                    a,
+                    b,
+                    model=pairwise_model,
+                    api_base=api_base,
+                    api_key=api_token,
+                )
             ).get("winner", "A")
             return a if winner_label == "A" else b
 
@@ -151,6 +185,9 @@ demo = gr.Interface(
     inputs=[
         gr.Textbox(value=API_BASE_DEFAULT, label="API Base Path"),
         gr.Textbox(value="", label="API Token", type="password"),
+        gr.Textbox(value=GENERATE_MODEL_DEFAULT, label="Generation Model"),
+        gr.Textbox(value=SCORE_MODEL_DEFAULT, label="Score Model"),
+        gr.Textbox(value=PAIRWISE_MODEL_DEFAULT, label="Pairwise Model"),
         gr.Textbox(lines=10, label="Instruction"),
         gr.Textbox(lines=5, label="Criteria (comma separated)"),
         gr.Number(value=NUM_GENERATIONS_DEFAULT, label="Number of Generations"),
