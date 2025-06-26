@@ -132,7 +132,7 @@ def run_tournament(
                 p: s
                 for p, s in zip(
                     all_players,
-                    ex.map(score, all_players),
+                    tqdm(ex.map(score, all_players), total=len(all_players)),
                 )
             }
         hist_fig = plt.figure()
@@ -161,7 +161,7 @@ def run_tournament(
         def tournament_round(pairs, executor):
             futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
             results = []
-            for fut in as_completed(futures):
+            for fut in tqdm(as_completed(futures), total=len(futures)):
                 a, b = futures[fut]
                 winner = fut.result()
                 loser = b if winner == a else a
@@ -192,7 +192,7 @@ def run_tournament(
                 for j in range(i + 1, len(candidates))
             ]
             futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
-            for fut in as_completed(futures):
+            for fut in tqdm(as_completed(futures), total=len(futures)):
                 wins[fut.result()] += 1
             return sorted(candidates, key=lambda p: wins[p], reverse=True)
 
