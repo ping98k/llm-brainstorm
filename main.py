@@ -23,14 +23,14 @@ def _clean_json(txt):
         return ast.literal_eval(txt)
 
 def run_tournament(
+    api_base,
+    api_token,
     instruction_input,
     criteria_input,
     n_gen,
-    num_top_picks,
     pool_size,
+    num_top_picks,
     max_workers,
-    api_base,
-    api_token,
     enable_score_filter,
     enable_pairwise_filter,
 ):
