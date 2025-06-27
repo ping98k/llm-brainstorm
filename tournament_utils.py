@@ -60,6 +60,7 @@ def prompt_score(
     temperature: float | None = None,
     include_instruction: bool = True,
     thinking: bool = False,
+    explain: bool = False,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return a JSON score string evaluating `player` on the criteria."""
@@ -67,9 +68,18 @@ def prompt_score(
     prompt = f"""Evaluate the output below on the following criteria:
 {criteria_block}
 
-Return JSON exactly like: {{"scores": [{example_scores}]}}."""
+"""
+    if explain:
+        prompt += f"""
+Explain each criteria in English concisely.
+One sentence per criteria.
+Return JSON exactly like: {{"explain":"explanation","scores": [{example_scores}]}}.""".strip()
+    else:
+        prompt += f"""Return JSON exactly like: {{"scores": [{example_scores}]}}."""
+
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
+
     prompt += f"\n\nOutput:\n{player}"
     kwargs = _completion_kwargs(api_base, api_key, temperature)
     kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
@@ -96,13 +106,23 @@ def prompt_pairwise(
     temperature: float | None = None,
     include_instruction: bool = True,
     thinking: bool = False,
+    explain: bool = False,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return which player wins in JSON using the given criteria."""
     prompt = f"""Compare the two players below using:
 {criteria_block}
 
-Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}."""
+"""
+
+    if explain:
+        prompt += f"""
+Explain each criteria in English concisely.
+One sentence per criteria.
+Return JSON exactly like: {{"explain":"explanation","winner": "A"}} or {{"explain":"explanation","winner": "B"}}.""".strip()
+    else:
+        prompt += f"""Return JSON exactly like: {{"winner": "A"}} or {{"winner": "B"}}."""
+
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
     prompt += f"\n\nPlayers:\n<A>{a}</A>\n<B>{b}</B>"

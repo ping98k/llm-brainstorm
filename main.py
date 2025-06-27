@@ -78,6 +78,8 @@ def run_tournament(
     generate_thinking,
     score_thinking,
     pairwise_thinking,
+    score_explain,
+    pairwise_explain,
 ):
     instruction = instruction_input.strip()
     criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or ["Factuality", "Instruction Following", "Precision"]
@@ -113,6 +115,11 @@ def run_tournament(
         score_thinking = SCORE_THINKING_DEFAULT
     if pairwise_thinking is None:
         pairwise_thinking = PAIRWISE_THINKING_DEFAULT
+    if score_explain is None:
+        score_explain = False
+    if pairwise_explain is None:
+        pairwise_explain = False
+
     process_log = []
     hist_fig = None
     top_picks_str = ""
@@ -145,8 +152,8 @@ def run_tournament(
 
     def log_completion(prefix: str, text: str, player_id: int | None = None):
         disp = text.replace("\n", " ")
-        if len(disp) > 100:
-            disp = disp[:100] + "…"
+        if len(disp) > 1000:
+            disp = disp[:1000] + "…"
         if player_id is not None:
             prefix = f"{prefix}(ID {player_id}) "
         return log(f"{prefix}{disp}")
@@ -154,7 +161,7 @@ def run_tournament(
         process_log.append(msg)
         tqdm.write(msg)
         yield "\n".join(process_log), hist_fig, top_picks_str, usage_str()
-    yield from log("Generating players …")
+    yield from log("Generating answers …")
     all_players, usage = generate_players(
         instruction,
         n_gen,
@@ -188,6 +195,7 @@ def run_tournament(
                 temperature=score_temperature,
                 include_instruction=score_with_instruction,
                 thinking=score_thinking,
+                explain=score_explain,
                 return_usage=True,
             )
             add_usage(usage)
@@ -227,6 +235,7 @@ def run_tournament(
                 temperature=pairwise_temperature,
                 include_instruction=pairwise_with_instruction,
                 thinking=pairwise_thinking,
+                explain=pairwise_explain,
                 return_usage=True,
             )
             add_usage(usage)
@@ -320,6 +329,8 @@ demo = gr.Interface(
         gr.Checkbox(value=GENERATE_THINKING_DEFAULT, label="Enable Thinking (Generate)"),
         gr.Checkbox(value=SCORE_THINKING_DEFAULT, label="Enable Thinking (Score)"),
         gr.Checkbox(value=PAIRWISE_THINKING_DEFAULT, label="Enable Thinking (Pairwise)"),
+        gr.Checkbox(value=False, label="Enable Explain (Score)"),
+        gr.Checkbox(value=False, label="Enable Explain (Pairwise)"),
     ],
     outputs=[
         gr.Textbox(lines=10, label="Process"),
