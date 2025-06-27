@@ -8,7 +8,7 @@ from tournament_utils import generate_players, prompt_score, prompt_pairwise
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 3))
 POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 5))
-MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 10))
+MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 100))
 NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 10))
 API_BASE_DEFAULT = os.getenv("OPENAI_API_BASE", "")
 API_TOKEN_DEFAULT = os.getenv("OPENAI_API_KEY", "")
@@ -133,6 +133,7 @@ def run_tournament(
                 return sum(vals) / len(vals) if vals else 0.0
             return float(data.get("score", 0))
 
+        yield from log("Histogram generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             scores = {
                 p: s
@@ -214,6 +215,7 @@ def run_tournament(
             candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
             return playoff(candidates, executor)[:num_top_picks]
 
+        yield from log("Pairwise generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             top_k = get_top(top_players, ex)
         for i, txt in enumerate(pairwise_outputs, 1):
