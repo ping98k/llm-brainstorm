@@ -1,6 +1,16 @@
 from litellm import completion
 
 
+def _completion_with_retry(*args, retries: int = 5, **kwargs):
+    """Call ``completion`` with retry logic."""
+    for _ in range(retries):
+        try:
+            return completion(*args, **kwargs)
+        except Exception:
+            pass
+    return None
+
+
 def _completion_kwargs(api_base: str | None, api_key: str | None) -> dict:
     """Build kwargs for litellm.completion from api settings."""
     kwargs: dict = {}
@@ -25,15 +35,30 @@ def generate_players(
     When ``return_usage`` is ``True`` the ``usage`` object from the completion
     response is also returned.
     """
-    response = completion(
-        model=model,
-        messages=[{"role": "user", "content": instruction}],
-        n=n,
-        **_completion_kwargs(api_base, api_key),
-    )
-    players = [c.message.content.strip() for c in response.choices]
+    players = []
+    usage_data = {"prompt_tokens": 0, "completion_tokens": 0}
+    for _ in range(n):
+        resp = _completion_with_retry(
+            model=model,
+            messages=[{"role": "user", "content": instruction}],
+            n=1,
+            **_completion_kwargs(api_base, api_key),
+        )
+        if resp is None:
+            continue
+        players.append(resp.choices[0].message.content.strip())
+        u = getattr(resp, "usage", None)
+        if u:
+            pt = getattr(u, "prompt_tokens", None)
+            if pt is None and isinstance(u, dict):
+                pt = u.get("prompt_tokens", 0)
+            ct = getattr(u, "completion_tokens", None)
+            if ct is None and isinstance(u, dict):
+                ct = u.get("completion_tokens", 0)
+            usage_data["prompt_tokens"] += pt or 0
+            usage_data["completion_tokens"] += ct or 0
     if return_usage:
-        return players, getattr(response, "usage", None)
+        return players, usage_data
     return players
 
 
@@ -60,14 +85,19 @@ Instruction:
 
 Output:
 {player}"""
-    response = completion(
+    response = _completion_with_retry(
         model=model,
         messages=[{"role": "system", "content": prompt}],
         **_completion_kwargs(api_base, api_key),
     )
-    text = response.choices[0].message.content.strip()
+    if response is None:
+        text = "{}"
+        usage = None
+    else:
+        text = response.choices[0].message.content.strip()
+        usage = getattr(response, "usage", None)
     if return_usage:
-        return text, getattr(response, "usage", None)
+        return text, usage
     return text
 
 
@@ -94,12 +124,17 @@ Instruction:
 Players:
 <A>{a}</A>
 <B>{b}</B>"""
-    response = completion(
+    response = _completion_with_retry(
         model=model,
         messages=[{"role": "system", "content": prompt}],
         **_completion_kwargs(api_base, api_key),
     )
-    text = response.choices[0].message.content.strip()
+    if response is None:
+        text = "{}"
+        usage = None
+    else:
+        text = response.choices[0].message.content.strip()
+        usage = getattr(response, "usage", None)
     if return_usage:
-        return text, getattr(response, "usage", None)
+        return text, usage
     return text

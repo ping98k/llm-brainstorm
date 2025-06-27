@@ -23,10 +23,13 @@ def make_response(contents):
 
 
 def test_generate_players():
-    resp = make_response([" player1 ", "player2\n"])
-    with patch('tournament_utils.completion', return_value=resp) as mock_comp:
+    resp1 = make_response([" player1 "])
+    resp2 = make_response(["player2\n"])
+    with patch('tournament_utils.completion', side_effect=[resp1, resp2]) as mock_comp:
         players = tu.generate_players('instr', 2, model='m', api_base='b', api_key='k')
-        mock_comp.assert_called_once_with(model='m', messages=[{'role': 'user', 'content': 'instr'}], n=2, api_base='b', api_key='k')
+        assert mock_comp.call_count == 2
+        for call in mock_comp.call_args_list:
+            assert call.kwargs == {'model': 'm', 'messages': [{'role': 'user', 'content': 'instr'}], 'n': 1, 'api_base': 'b', 'api_key': 'k'}
         assert players == ['player1', 'player2']
 
 
