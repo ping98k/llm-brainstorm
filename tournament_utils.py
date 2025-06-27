@@ -1,13 +1,19 @@
 from litellm import completion
 
 
-def _completion_kwargs(api_base: str | None, api_key: str | None) -> dict:
+def _completion_kwargs(
+    api_base: str | None,
+    api_key: str | None,
+    temperature: float | None,
+) -> dict:
     """Build kwargs for litellm.completion from api settings."""
     kwargs: dict = {}
     if api_base:
         kwargs["api_base"] = api_base
     if api_key:
         kwargs["api_key"] = api_key
+    if temperature is not None:
+        kwargs["temperature"] = temperature
     return kwargs
 
 
@@ -18,6 +24,7 @@ def generate_players(
     *,
     api_base: str | None = None,
     api_key: str | None = None,
+    temperature: float | None = None,
     return_usage: bool = False,
 ) -> list[str] | tuple[list[str], object]:
     """Request ``n`` completions for the instruction using the given model.
@@ -29,7 +36,7 @@ def generate_players(
         model=model,
         messages=[{"role": "user", "content": instruction}],
         n=n,
-        **_completion_kwargs(api_base, api_key),
+        **_completion_kwargs(api_base, api_key, temperature),
     )
     players = [c.message.content.strip() for c in response.choices]
     if return_usage:
@@ -46,6 +53,8 @@ def prompt_score(
     *,
     api_base: str | None = None,
     api_key: str | None = None,
+    temperature: float | None = None,
+    include_instruction: bool = True,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return a JSON score string evaluating `player` on the criteria."""
@@ -53,17 +62,14 @@ def prompt_score(
     prompt = f"""Evaluate the output below on the following criteria:
 {criteria_block}
 
-Return JSON exactly like: {{"scores": [{example_scores}]}}.
-
-Instruction:
-{instruction}
-
-Output:
-{player}"""
+Return JSON exactly like: {{"scores": [{example_scores}]}}."""
+    if include_instruction:
+        prompt += f"\n\nInstruction:\n{instruction}"
+    prompt += f"\n\nOutput:\n{player}"
     response = completion(
         model=model,
         messages=[{"role": "system", "content": prompt}],
-        **_completion_kwargs(api_base, api_key),
+        **_completion_kwargs(api_base, api_key, temperature),
     )
     text = response.choices[0].message.content.strip()
     if return_usage:
@@ -80,24 +86,22 @@ def prompt_pairwise(
     *,
     api_base: str | None = None,
     api_key: str | None = None,
+    temperature: float | None = None,
+    include_instruction: bool = True,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return which player wins in JSON using the given criteria."""
     prompt = f"""Compare the two players below using:
 {criteria_block}
 
-Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}.
-
-Instruction:
-{instruction}
-
-Players:
-<A>{a}</A>
-<B>{b}</B>"""
+Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}."""
+    if include_instruction:
+        prompt += f"\n\nInstruction:\n{instruction}"
+    prompt += f"\n\nPlayers:\n<A>{a}</A>\n<B>{b}</B>"
     response = completion(
         model=model,
         messages=[{"role": "system", "content": prompt}],
-        **_completion_kwargs(api_base, api_key),
+        **_completion_kwargs(api_base, api_key, temperature),
     )
     text = response.choices[0].message.content.strip()
     if return_usage:

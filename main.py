@@ -17,6 +17,11 @@ PAIRWISE_FILTER_DEFAULT = os.getenv("ENABLE_PAIRWISE_FILTER", "true").lower() ==
 GENERATE_MODEL_DEFAULT = os.getenv("GENERATE_MODEL", "gpt-4o-mini")
 SCORE_MODEL_DEFAULT = os.getenv("SCORE_MODEL", "gpt-4o-mini")
 PAIRWISE_MODEL_DEFAULT = os.getenv("PAIRWISE_MODEL", "gpt-4o-mini")
+GENERATE_TEMPERATURE_DEFAULT = float(os.getenv("GENERATE_TEMPERATURE", "1.0"))
+SCORE_TEMPERATURE_DEFAULT = float(os.getenv("SCORE_TEMPERATURE", "1.0"))
+PAIRWISE_TEMPERATURE_DEFAULT = float(os.getenv("PAIRWISE_TEMPERATURE", "1.0"))
+SCORE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_SCORE", "true").lower() == "true"
+PAIRWISE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_PAIRWISE", "true").lower() == "true"
 CRITERIA_DEFAULT = "Factuality,Instruction Following,Precision"
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
@@ -31,6 +36,9 @@ def run_tournament(
     generate_model,
     score_model,
     pairwise_model,
+    generate_temperature,
+    score_temperature,
+    pairwise_temperature,
     instruction_input,
     criteria_input,
     n_gen,
@@ -39,6 +47,8 @@ def run_tournament(
     max_workers,
     enable_score_filter,
     enable_pairwise_filter,
+    score_with_instruction,
+    pairwise_with_instruction,
 ):
     instruction = instruction_input.strip()
     criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or ["Factuality", "Instruction Following", "Precision"]
@@ -46,6 +56,12 @@ def run_tournament(
     num_top_picks = int(num_top_picks)
     pool_size = int(pool_size)
     max_workers = int(max_workers)
+    if generate_temperature is None:
+        generate_temperature = GENERATE_TEMPERATURE_DEFAULT
+    if score_temperature is None:
+        score_temperature = SCORE_TEMPERATURE_DEFAULT
+    if pairwise_temperature is None:
+        pairwise_temperature = PAIRWISE_TEMPERATURE_DEFAULT
     if not api_base:
         api_base = API_BASE_DEFAULT
     if not api_token:
@@ -58,6 +74,10 @@ def run_tournament(
         pairwise_model = PAIRWISE_MODEL_DEFAULT
     enable_score_filter = bool(enable_score_filter)
     enable_pairwise_filter = bool(enable_pairwise_filter)
+    if score_with_instruction is None:
+        score_with_instruction = SCORE_WITH_INSTRUCTION_DEFAULT
+    if pairwise_with_instruction is None:
+        pairwise_with_instruction = PAIRWISE_WITH_INSTRUCTION_DEFAULT
     process_log = []
     hist_fig = None
     top_picks_str = ""
@@ -104,6 +124,7 @@ def run_tournament(
         model=generate_model,
         api_base=api_base,
         api_key=api_token,
+        temperature=generate_temperature,
         return_usage=True,
     )
     add_usage(usage)
@@ -123,6 +144,8 @@ def run_tournament(
                 model=score_model,
                 api_base=api_base,
                 api_key=api_token,
+                temperature=score_temperature,
+                include_instruction=score_with_instruction,
                 return_usage=True,
             )
             add_usage(usage)
@@ -161,6 +184,8 @@ def run_tournament(
                 model=pairwise_model,
                 api_base=api_base,
                 api_key=api_token,
+                temperature=pairwise_temperature,
+                include_instruction=pairwise_with_instruction,
                 return_usage=True,
             )
             add_usage(usage)
@@ -231,8 +256,11 @@ demo = gr.Interface(
         gr.Textbox(value=API_BASE_DEFAULT, label="API Base Path"),
         gr.Textbox(value="", label="API Token", type="password"),
         gr.Textbox(value=GENERATE_MODEL_DEFAULT, label="Generation Model"),
+        gr.Number(value=GENERATE_TEMPERATURE_DEFAULT, label="Generation Temperature"),
         gr.Textbox(value=SCORE_MODEL_DEFAULT, label="Score Model"),
+        gr.Number(value=SCORE_TEMPERATURE_DEFAULT, label="Score Temperature"),
         gr.Textbox(value=PAIRWISE_MODEL_DEFAULT, label="Pairwise Model"),
+        gr.Number(value=PAIRWISE_TEMPERATURE_DEFAULT, label="Pairwise Temperature"),
         gr.Textbox(lines=10, label="Instruction"),
         gr.Textbox(value=CRITERIA_DEFAULT, lines=5, label="Criteria (comma separated)"),
         gr.Number(value=NUM_GENERATIONS_DEFAULT, label="Number of Generations"),
@@ -241,6 +269,8 @@ demo = gr.Interface(
         gr.Number(value=MAX_WORKERS_DEFAULT, label="Max Workers"),
         gr.Checkbox(value=SCORE_FILTER_DEFAULT, label="Enable Score Filter"),
         gr.Checkbox(value=PAIRWISE_FILTER_DEFAULT, label="Enable Pairwise Filter"),
+        gr.Checkbox(value=SCORE_WITH_INSTRUCTION_DEFAULT, label="Pass Instruction to Score Model"),
+        gr.Checkbox(value=PAIRWISE_WITH_INSTRUCTION_DEFAULT, label="Pass Instruction to Pairwise Model"),
     ],
     outputs=[
         gr.Textbox(lines=10, label="Process"),

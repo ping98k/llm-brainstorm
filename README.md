@@ -14,6 +14,11 @@ This project provides a small interface for running "tournaments" between langua
    - `GENERATE_MODEL`
    - `SCORE_MODEL`
    - `PAIRWISE_MODEL`
+   - `GENERATE_TEMPERATURE`
+   - `SCORE_TEMPERATURE`
+   - `PAIRWISE_TEMPERATURE`
+   - `PASS_INSTRUCTION_TO_SCORE`
+   - `PASS_INSTRUCTION_TO_PAIRWISE`
    - `ENABLE_SCORE_FILTER`
    - `ENABLE_PAIRWISE_FILTER`
 2. Install dependencies (example with `pip`):
