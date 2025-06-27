@@ -131,10 +131,12 @@ def run_tournament(
             f"Total tokens: {prompt_tokens + completion_tokens}"
         )
 
-    def log_completion(prefix: str, text: str):
+    def log_completion(prefix: str, text: str, player_id: int | None = None):
         disp = text.replace("\n", " ")
         if len(disp) > 100:
             disp = disp[:100] + "…"
+        if player_id is not None:
+            prefix = f"{prefix}(ID {player_id}) "
         return log(f"{prefix}{disp}")
     def log(msg):
         process_log.append(msg)
@@ -153,12 +155,15 @@ def run_tournament(
     add_usage(usage)
     yield from log(f"{len(all_players)} players generated")
     for i, p in enumerate(all_players, 1):
-        yield from log_completion(f"Completion {i}: ", p)
+        yield from log_completion(f"Completion {i}: ", p, i)
     def criteria_block():
         return "\n".join(f"{i + 1}) {c}" for i, c in enumerate(criteria_list))
 
     if enable_score_filter:
-        def score(player):
+        players_with_ids = list(enumerate(all_players, 1))
+
+        def score(item):
+            idx, player = item
             text, usage = prompt_score(
                 instruction,
                 criteria_list,
@@ -172,7 +177,7 @@ def run_tournament(
                 return_usage=True,
             )
             add_usage(usage)
-            score_outputs.append(text)
+            score_outputs.append((idx, text))
             data = _clean_json(text)
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
@@ -183,7 +188,7 @@ def run_tournament(
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             prog = SimpleProgress(len(all_players), "Scoring")
             scores = {}
-            for p, s in zip(all_players, ex.map(score, all_players)):
+            for (idx, p), s in zip(players_with_ids, ex.map(score, players_with_ids)):
                 scores[p] = s
                 yield from log(prog.step())
         hist_fig = plt.figure()
@@ -191,8 +196,8 @@ def run_tournament(
         yield from log("Histogram generated")
         top_players = sorted(all_players, key=scores.get, reverse=True)[:pool_size]
         yield from log(f"Filtered to {len(top_players)} players with best scores")
-        for i, txt in enumerate(score_outputs, 1):
-            yield from log_completion(f"Score completion {i}: ", txt)
+        for i, (idx, txt) in enumerate(score_outputs, 1):
+            yield from log_completion(f"Score completion {i}: ", txt, idx)
     else:
         top_players = all_players
     if enable_pairwise_filter:
