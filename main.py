@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv("./local.env")
+load_dotenv("./local.env",override=True)
 import os, json, re, ast, gradio as gr
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -30,7 +30,7 @@ class SimpleProgress:
         return f"{self.prefix} {self.count}/{self.total} - ETA {eta}"
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 3))
-POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 5))
+POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 6))
 MAX_WORKERS_DEFAULT = int(os.getenv("MAX_WORKERS", 100))
 NUM_GENERATIONS_DEFAULT = int(os.getenv("NUM_GENERATIONS", 10))
 API_BASE_DEFAULT = os.getenv("OPENAI_API_BASE", "")
@@ -40,9 +40,9 @@ PAIRWISE_FILTER_DEFAULT = os.getenv("ENABLE_PAIRWISE_FILTER", "true").lower() ==
 GENERATE_MODEL_DEFAULT = os.getenv("GENERATE_MODEL", "gpt-4o-mini")
 SCORE_MODEL_DEFAULT = os.getenv("SCORE_MODEL", "gpt-4o-mini")
 PAIRWISE_MODEL_DEFAULT = os.getenv("PAIRWISE_MODEL", "gpt-4o-mini")
-GENERATE_TEMPERATURE_DEFAULT = float(os.getenv("GENERATE_TEMPERATURE", "1.0"))
-SCORE_TEMPERATURE_DEFAULT = float(os.getenv("SCORE_TEMPERATURE", "0.1"))
-PAIRWISE_TEMPERATURE_DEFAULT = float(os.getenv("PAIRWISE_TEMPERATURE", "0.1"))
+GENERATE_TEMPERATURE_DEFAULT = float(os.getenv("GENERATE_TEMPERATURE", "0.9"))
+SCORE_TEMPERATURE_DEFAULT = float(os.getenv("SCORE_TEMPERATURE", "0.6"))
+PAIRWISE_TEMPERATURE_DEFAULT = float(os.getenv("PAIRWISE_TEMPERATURE", "0.6"))
 SCORE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_SCORE", "true").lower() == "true"
 PAIRWISE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_PAIRWISE", "true").lower() == "true"
 CRITERIA_DEFAULT = "Factuality,Instruction Following,Precision"
