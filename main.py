@@ -17,7 +17,7 @@ PAIRWISE_FILTER_DEFAULT = os.getenv("ENABLE_PAIRWISE_FILTER", "true").lower() ==
 GENERATE_MODEL_DEFAULT = os.getenv("GENERATE_MODEL", "gpt-4o-mini")
 SCORE_MODEL_DEFAULT = os.getenv("SCORE_MODEL", "gpt-4o-mini")
 PAIRWISE_MODEL_DEFAULT = os.getenv("PAIRWISE_MODEL", "gpt-4o-mini")
-
+CRITERIA_DEFAULT = "Factuality,Instruction Following,Precision"
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
     try:
@@ -234,7 +234,7 @@ demo = gr.Interface(
         gr.Textbox(value=SCORE_MODEL_DEFAULT, label="Score Model"),
         gr.Textbox(value=PAIRWISE_MODEL_DEFAULT, label="Pairwise Model"),
         gr.Textbox(lines=10, label="Instruction"),
-        gr.Textbox(lines=5, label="Criteria (comma separated)"),
+        gr.Textbox(value=CRITERIA_DEFAULT, lines=5, label="Criteria (comma separated)"),
         gr.Number(value=NUM_GENERATIONS_DEFAULT, label="Number of Generations"),
         gr.Number(value=POOL_SIZE_DEFAULT, label="Top Picks Score Filter"),
         gr.Number(value=NUM_TOP_PICKS_DEFAULT, label="Top Picks Pairwise"),
