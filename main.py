@@ -5,6 +5,29 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from tournament_utils import generate_players, prompt_score, prompt_pairwise
+import time
+
+
+class SimpleProgress:
+    """Minimal progress helper to compute ETA."""
+
+    def __init__(self, total: int, prefix: str = "Progress"):
+        self.total = total
+        self.prefix = prefix
+        self.start = time.time()
+        self.count = 0
+
+    def step(self) -> str:
+        self.count += 1
+        elapsed = time.time() - self.start
+        remaining = (elapsed / self.count) * (self.total - self.count) if self.count else 0
+        h, rem = divmod(int(remaining), 3600)
+        m, s = divmod(rem, 60)
+        if h:
+            eta = f"{h:d}:{m:02d}:{s:02d}"
+        else:
+            eta = f"{m:02d}:{s:02d}"
+        return f"{self.prefix} {self.count}/{self.total} - ETA {eta}"
 
 NUM_TOP_PICKS_DEFAULT = int(os.getenv("NUM_TOP_PICKS", 3))
 POOL_SIZE_DEFAULT = int(os.getenv("POOL_SIZE", 5))
@@ -135,13 +158,11 @@ def run_tournament(
 
         yield from log("Histogram generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            scores = {
-                p: s
-                for p, s in zip(
-                    all_players,
-                    tqdm(ex.map(score, all_players), total=len(all_players)),
-                )
-            }
+            prog = SimpleProgress(len(all_players), "Scoring")
+            scores = {}
+            for p, s in zip(all_players, ex.map(score, all_players)):
+                scores[p] = s
+                yield from log(prog.step())
         hist_fig = plt.figure()
         plt.hist(list(scores.values()), bins=10)
         yield from log("Histogram generated")
@@ -168,23 +189,25 @@ def run_tournament(
             winner_label = _clean_json(text).get("winner", "A")
             return a if winner_label == "A" else b
 
-        def tournament_round(pairs, executor):
+        def tournament_round(pairs, executor, progress):
             futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
             results = []
-            for fut in tqdm(as_completed(futures), total=len(futures)):
+            for fut in as_completed(futures):
                 a, b = futures[fut]
                 winner = fut.result()
                 loser = b if winner == a else a
                 results.append((winner, loser))
+                yield from log(progress.step())
             return results
 
         def tournament(players, executor):
             lost_to = {}
             current = players[:]
+            progress = SimpleProgress(len(players) - 1, "Pairwise round")
             while len(current) > 1:
                 leftover = current[-1] if len(current) % 2 == 1 else None
                 pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
-                round_results = tournament_round(pairs, executor)
+                round_results = yield from tournament_round(pairs, executor, progress)
                 for w, l in round_results:
                     lost_to[l] = w
                 current = [w for w, _ in round_results]
@@ -203,21 +226,24 @@ def run_tournament(
                 for j in range(i + 1, len(candidates))
             ]
             futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
-            for fut in tqdm(as_completed(futures), total=len(futures)):
+            prog = SimpleProgress(len(futures), "Playoff")
+            for fut in as_completed(futures):
                 wins[fut.result()] += 1
+                yield from log(prog.step())
             return sorted(candidates, key=lambda p: wins[p], reverse=True)
 
         def get_top(players, executor):
-            champion, lost_to = tournament(players, executor)
+            champion, lost_to = yield from tournament(players, executor)
             runner_up = lost_to.get(champion)
             finalists = [champion] + ([runner_up] if runner_up else [])
             semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
             candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
-            return playoff(candidates, executor)[:num_top_picks]
+            result = yield from playoff(candidates, executor)
+            return result[:num_top_picks]
 
         yield from log("Pairwise generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            top_k = get_top(top_players, ex)
+            top_k = yield from get_top(top_players, ex)
         for i, txt in enumerate(pairwise_outputs, 1):
             yield from log_completion(f"Pairwise completion {i}: ", txt)
     else:
