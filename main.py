@@ -189,25 +189,25 @@ def run_tournament(
             winner_label = _clean_json(text).get("winner", "A")
             return a if winner_label == "A" else b
 
-        def tournament_round(pairs, executor):
+        def tournament_round(pairs, executor, progress):
             futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
             results = []
-            prog = SimpleProgress(len(futures), "Pairwise round")
             for fut in as_completed(futures):
                 a, b = futures[fut]
                 winner = fut.result()
                 loser = b if winner == a else a
                 results.append((winner, loser))
-                yield from log(prog.step())
+                yield from log(progress.step())
             return results
 
         def tournament(players, executor):
             lost_to = {}
             current = players[:]
+            progress = SimpleProgress(len(players) - 1, "Pairwise round")
             while len(current) > 1:
                 leftover = current[-1] if len(current) % 2 == 1 else None
                 pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
-                round_results = yield from tournament_round(pairs, executor)
+                round_results = yield from tournament_round(pairs, executor, progress)
                 for w, l in round_results:
                     lost_to[l] = w
                 current = [w for w, _ in round_results]
