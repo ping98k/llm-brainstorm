@@ -2,7 +2,10 @@ from litellm import completion
 
 
 def _completion_with_retry(*args, retries: int = 5, **kwargs):
-    """Call ``completion`` with retry logic."""
+    """Call ``completion`` with retry logic.
+
+    Returns ``None`` if all attempts fail.
+    """
     for _ in range(retries):
         try:
             return completion(*args, **kwargs)

@@ -33,6 +33,13 @@ def test_generate_players():
         assert players == ['player1', 'player2']
 
 
+def test_generate_players_drops_failed():
+    with patch('tournament_utils.completion', side_effect=Exception('boom')) as m:
+        players = tu.generate_players('instr', 1, model='m')
+        assert players == []
+        assert m.call_count == 5
+
+
 def test_prompt_score():
     resp = make_response([" {\"score\": [5]} "])
     with patch('tournament_utils.completion', return_value=resp) as mock_comp:
