@@ -33,3 +33,8 @@ This project provides a small interface for running "tournaments" between langua
 
 The interface will generate multiple answers, optionally filter them by score and run a pairwise tournament to select the best outputs.
 
+## Terminology
+
+- *Judge* refers to both the **Score Model** and **Pairwise Model**.
+- When instructions mention **updating the LLM**, update the **Generation**, **Score**, and **Pairwise** models together.
+- *Output*, *answer*, or *response* are all considered the same as a **player** in the tournament.
