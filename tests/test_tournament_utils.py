@@ -26,7 +26,7 @@ def test_generate_players():
     resp = make_response([" player1 ", "player2\n"])
     with patch('tournament_utils.completion', return_value=resp) as mock_comp:
         players = tu.generate_players('instr', 2, model='m', api_base='b', api_key='k', temperature=0.5)
-        mock_comp.assert_called_once_with(model='m', messages=[{'role': 'user', 'content': 'instr'}], n=2, api_base='b', api_key='k', temperature=0.5)
+        mock_comp.assert_called_once_with(model='m', messages=[{'role': 'user', 'content': 'instr'}], n=2, api_base='b', api_key='k', temperature=0.5, thinking={'type': 'disabled', 'budget_tokens': 0})
         assert players == ['player1', 'player2']
 
 
@@ -50,3 +50,25 @@ def test_prompt_pairwise():
         assert mock_comp.call_args.kwargs['api_key'] == 'k'
         assert mock_comp.call_args.kwargs['temperature'] == 0.3
         assert result == '{"winner": "A"}'
+
+
+def test_thinking_passed_to_completion():
+    resp = make_response(["ok"])
+    with patch('tournament_utils.completion', return_value=resp) as mock_comp:
+        tu.generate_players('i', 1, thinking=True)
+        tu.prompt_score('i', ['c'], 'block', 'p', thinking=True)
+        tu.prompt_pairwise('i', 'block', 'a', 'b', thinking=True)
+        assert mock_comp.call_count == 3
+        for call in mock_comp.call_args_list:
+            assert call.kwargs['thinking'] == {'type': 'enabled', 'budget_tokens': 1024}
+
+
+def test_thinking_disabled_by_default():
+    resp = make_response(["ok"])
+    with patch('tournament_utils.completion', return_value=resp) as mock_comp:
+        tu.generate_players('i', 1)
+        tu.prompt_score('i', ['c'], 'block', 'p')
+        tu.prompt_pairwise('i', 'block', 'a', 'b')
+        assert mock_comp.call_count == 3
+        for call in mock_comp.call_args_list:
+            assert call.kwargs['thinking'] == {'type': 'disabled', 'budget_tokens': 0}

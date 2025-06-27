@@ -106,13 +106,16 @@ def test_run_tournament_full_loop():
             enable_pairwise_filter=True,
             score_with_instruction=True,
             pairwise_with_instruction=True,
+            generate_thinking=True,
+            score_thinking=True,
+            pairwise_thinking=True,
         ))
 
     process_log, hist_fig, top_picks, usage = results[-1]
     assert 'Done' in process_log
     assert hist_fig == 'fig'
     assert top_picks.strip() in {'p1', 'p2'}
-    mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k', temperature=1, return_usage=True)
+    mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k', temperature=1, thinking=True, budget_tokens=1024, return_usage=True)
     assert 'Score completion' in process_log
     assert 'Pairwise completion' in process_log
     assert 'Prompt tokens' in usage
@@ -151,6 +154,9 @@ def test_run_tournament_pairwise_odd_players():
             enable_pairwise_filter=True,
             score_with_instruction=True,
             pairwise_with_instruction=True,
+            generate_thinking=True,
+            score_thinking=True,
+            pairwise_thinking=True,
         ))
 
     process_log, fig, top_picks, usage = results[-1]
