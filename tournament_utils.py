@@ -71,9 +71,8 @@ def prompt_score(
 """
     if explain:
         prompt += f"""
-Explain each criteria in English concisely.
-One sentence per criteria.
-Return JSON exactly like: {{"explain":"explanation","scores": [{example_scores}]}}.""".strip()
+Provide detailed reasons in English for each criterion.
+Return JSON exactly like: {{"reasons":"","scores": [{example_scores}]}}.""".strip()
     else:
         prompt += f"""Return JSON exactly like: {{"scores": [{example_scores}]}}."""
 
@@ -117,9 +116,8 @@ def prompt_pairwise(
 
     if explain:
         prompt += f"""
-Explain each criteria in English concisely.
-One sentence per criteria.
-Return JSON exactly like: {{"explain":"explanation","winner": "A"}} or {{"explain":"explanation","winner": "B"}}.""".strip()
+Provide detailed reasons in English for each criterion.
+Return JSON exactly like: {{"reasons":"","winner": "A"}} or {{"reasons":"","winner": "B"}}.""".strip()
     else:
         prompt += f"""Return JSON exactly like: {{"winner": "A"}} or {{"winner": "B"}}."""
 
