@@ -45,6 +45,9 @@ SCORE_TEMPERATURE_DEFAULT = float(os.getenv("SCORE_TEMPERATURE", "0.6"))
 PAIRWISE_TEMPERATURE_DEFAULT = float(os.getenv("PAIRWISE_TEMPERATURE", "0.6"))
 SCORE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_SCORE", "true").lower() == "true"
 PAIRWISE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_PAIRWISE", "true").lower() == "true"
+GENERATE_THINKING_DEFAULT = os.getenv("ENABLE_GENERATE_THINKING", "false").lower() == "true"
+SCORE_THINKING_DEFAULT = os.getenv("ENABLE_SCORE_THINKING", "false").lower() == "true"
+PAIRWISE_THINKING_DEFAULT = os.getenv("ENABLE_PAIRWISE_THINKING", "false").lower() == "true"
 CRITERIA_DEFAULT = "Factuality,Instruction Following,Precision"
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
@@ -72,6 +75,9 @@ def run_tournament(
     enable_pairwise_filter,
     score_with_instruction,
     pairwise_with_instruction,
+    generate_thinking,
+    score_thinking,
+    pairwise_thinking,
 ):
     instruction = instruction_input.strip()
     criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or ["Factuality", "Instruction Following", "Precision"]
@@ -101,6 +107,12 @@ def run_tournament(
         score_with_instruction = SCORE_WITH_INSTRUCTION_DEFAULT
     if pairwise_with_instruction is None:
         pairwise_with_instruction = PAIRWISE_WITH_INSTRUCTION_DEFAULT
+    if generate_thinking is None:
+        generate_thinking = GENERATE_THINKING_DEFAULT
+    if score_thinking is None:
+        score_thinking = SCORE_THINKING_DEFAULT
+    if pairwise_thinking is None:
+        pairwise_thinking = PAIRWISE_THINKING_DEFAULT
     process_log = []
     hist_fig = None
     top_picks_str = ""
@@ -150,6 +162,7 @@ def run_tournament(
         api_base=api_base,
         api_key=api_token,
         temperature=generate_temperature,
+        thinking=generate_thinking,
         return_usage=True,
     )
     add_usage(usage)
@@ -174,6 +187,7 @@ def run_tournament(
                 api_key=api_token,
                 temperature=score_temperature,
                 include_instruction=score_with_instruction,
+                thinking=score_thinking,
                 return_usage=True,
             )
             add_usage(usage)
@@ -212,6 +226,7 @@ def run_tournament(
                 api_key=api_token,
                 temperature=pairwise_temperature,
                 include_instruction=pairwise_with_instruction,
+                thinking=pairwise_thinking,
                 return_usage=True,
             )
             add_usage(usage)
@@ -302,6 +317,9 @@ demo = gr.Interface(
         gr.Checkbox(value=PAIRWISE_FILTER_DEFAULT, label="Enable Pairwise Filter"),
         gr.Checkbox(value=SCORE_WITH_INSTRUCTION_DEFAULT, label="Pass Instruction to Score Model"),
         gr.Checkbox(value=PAIRWISE_WITH_INSTRUCTION_DEFAULT, label="Pass Instruction to Pairwise Model"),
+        gr.Checkbox(value=GENERATE_THINKING_DEFAULT, label="Enable Thinking (Generate)"),
+        gr.Checkbox(value=SCORE_THINKING_DEFAULT, label="Enable Thinking (Score)"),
+        gr.Checkbox(value=PAIRWISE_THINKING_DEFAULT, label="Enable Thinking (Pairwise)"),
     ],
     outputs=[
         gr.Textbox(lines=10, label="Process"),

@@ -21,6 +21,14 @@ This project provides a small interface for running "tournaments" between langua
    - `PASS_INSTRUCTION_TO_PAIRWISE`
    - `ENABLE_SCORE_FILTER`
    - `ENABLE_PAIRWISE_FILTER`
+   - `ENABLE_GENERATE_THINKING`
+   - `ENABLE_SCORE_THINKING`
+   - `ENABLE_PAIRWISE_THINKING`
+
+   When any of the thinking flags are enabled, the app sends
+   `chat_template_kwargs={"enable_thinking": True}` with each
+   `litellm.completion` call for that model. Otherwise it sends
+   `chat_template_kwargs={"enable_thinking": False}`.
 2. Install dependencies (example with `pip`):
    ```bash
    pip install gradio litellm python-dotenv tqdm matplotlib

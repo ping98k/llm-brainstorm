@@ -25,6 +25,7 @@ def generate_players(
     api_base: str | None = None,
     api_key: str | None = None,
     temperature: float | None = None,
+    thinking: bool = False,
     return_usage: bool = False,
 ) -> list[str] | tuple[list[str], object]:
     """Request ``n`` completions for the instruction using the given model.
@@ -32,11 +33,14 @@ def generate_players(
     When ``return_usage`` is ``True`` the ``usage`` object from the completion
     response is also returned.
     """
+    messages = [{"role": "user", "content": instruction}]
+    kwargs = _completion_kwargs(api_base, api_key, temperature)
+    kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
     response = completion(
         model=model,
-        messages=[{"role": "user", "content": instruction}],
+        messages=messages,
         n=n,
-        **_completion_kwargs(api_base, api_key, temperature),
+        **kwargs,
     )
     players = [c.message.content.strip() for c in response.choices]
     if return_usage:
@@ -55,6 +59,7 @@ def prompt_score(
     api_key: str | None = None,
     temperature: float | None = None,
     include_instruction: bool = True,
+    thinking: bool = False,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return a JSON score string evaluating `player` on the criteria."""
@@ -66,10 +71,12 @@ Return JSON exactly like: {{"scores": [{example_scores}]}}."""
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
     prompt += f"\n\nOutput:\n{player}"
+    kwargs = _completion_kwargs(api_base, api_key, temperature)
+    kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
     response = completion(
         model=model,
         messages=[{"role": "system", "content": prompt}],
-        **_completion_kwargs(api_base, api_key, temperature),
+        **kwargs,
     )
     text = response.choices[0].message.content.strip()
     if return_usage:
@@ -88,6 +95,7 @@ def prompt_pairwise(
     api_key: str | None = None,
     temperature: float | None = None,
     include_instruction: bool = True,
+    thinking: bool = False,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return which player wins in JSON using the given criteria."""
@@ -98,10 +106,12 @@ Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}."""
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
     prompt += f"\n\nPlayers:\n<A>{a}</A>\n<B>{b}</B>"
+    kwargs = _completion_kwargs(api_base, api_key, temperature)
+    kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
     response = completion(
         model=model,
         messages=[{"role": "system", "content": prompt}],
-        **_completion_kwargs(api_base, api_key, temperature),
+        **kwargs,
     )
     text = response.choices[0].message.content.strip()
     if return_usage:
