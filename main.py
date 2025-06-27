@@ -48,7 +48,6 @@ PAIRWISE_WITH_INSTRUCTION_DEFAULT = os.getenv("PASS_INSTRUCTION_TO_PAIRWISE", "t
 GENERATE_THINKING_DEFAULT = os.getenv("ENABLE_GENERATE_THINKING", "false").lower() == "true"
 SCORE_THINKING_DEFAULT = os.getenv("ENABLE_SCORE_THINKING", "false").lower() == "true"
 PAIRWISE_THINKING_DEFAULT = os.getenv("ENABLE_PAIRWISE_THINKING", "false").lower() == "true"
-THINKING_BUDGET_TOKENS_DEFAULT = int(os.getenv("THINKING_BUDGET_TOKENS", "1024"))
 CRITERIA_DEFAULT = "Factuality,Instruction Following,Precision"
 def _clean_json(txt):
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
@@ -164,7 +163,6 @@ def run_tournament(
         api_key=api_token,
         temperature=generate_temperature,
         thinking=generate_thinking,
-        budget_tokens=THINKING_BUDGET_TOKENS_DEFAULT,
         return_usage=True,
     )
     add_usage(usage)
@@ -190,7 +188,6 @@ def run_tournament(
                 temperature=score_temperature,
                 include_instruction=score_with_instruction,
                 thinking=score_thinking,
-                budget_tokens=THINKING_BUDGET_TOKENS_DEFAULT,
                 return_usage=True,
             )
             add_usage(usage)
@@ -230,7 +227,6 @@ def run_tournament(
                 temperature=pairwise_temperature,
                 include_instruction=pairwise_with_instruction,
                 thinking=pairwise_thinking,
-                budget_tokens=THINKING_BUDGET_TOKENS_DEFAULT,
                 return_usage=True,
             )
             add_usage(usage)

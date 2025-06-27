@@ -26,7 +26,7 @@ def test_generate_players():
     resp = make_response([" player1 ", "player2\n"])
     with patch('tournament_utils.completion', return_value=resp) as mock_comp:
         players = tu.generate_players('instr', 2, model='m', api_base='b', api_key='k', temperature=0.5)
-        mock_comp.assert_called_once_with(model='m', messages=[{'role': 'user', 'content': 'instr'}], n=2, api_base='b', api_key='k', temperature=0.5, thinking={'type': 'disabled', 'budget_tokens': 0})
+        mock_comp.assert_called_once_with(model='m', messages=[{'role': 'user', 'content': 'instr'}], n=2, api_base='b', api_key='k', temperature=0.5, chat_template_kwargs={'enable_thinking': False})
         assert players == ['player1', 'player2']
 
 
@@ -60,7 +60,7 @@ def test_thinking_passed_to_completion():
         tu.prompt_pairwise('i', 'block', 'a', 'b', thinking=True)
         assert mock_comp.call_count == 3
         for call in mock_comp.call_args_list:
-            assert call.kwargs['thinking'] == {'type': 'enabled', 'budget_tokens': 1024}
+            assert call.kwargs['chat_template_kwargs'] == {'enable_thinking': True}
 
 
 def test_thinking_disabled_by_default():
@@ -71,4 +71,4 @@ def test_thinking_disabled_by_default():
         tu.prompt_pairwise('i', 'block', 'a', 'b')
         assert mock_comp.call_count == 3
         for call in mock_comp.call_args_list:
-            assert call.kwargs['thinking'] == {'type': 'disabled', 'budget_tokens': 0}
+            assert call.kwargs['chat_template_kwargs'] == {'enable_thinking': False}

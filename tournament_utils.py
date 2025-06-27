@@ -1,7 +1,4 @@
-import os
 from litellm import completion
-
-BUDGET_TOKENS_DEFAULT = int(os.getenv("THINKING_BUDGET_TOKENS", "1024"))
 
 
 def _completion_kwargs(
@@ -29,7 +26,6 @@ def generate_players(
     api_key: str | None = None,
     temperature: float | None = None,
     thinking: bool = False,
-    budget_tokens: int = BUDGET_TOKENS_DEFAULT,
     return_usage: bool = False,
 ) -> list[str] | tuple[list[str], object]:
     """Request ``n`` completions for the instruction using the given model.
@@ -39,10 +35,7 @@ def generate_players(
     """
     messages = [{"role": "user", "content": instruction}]
     kwargs = _completion_kwargs(api_base, api_key, temperature)
-    kwargs["thinking"] = {
-        "type": "enabled" if thinking else "disabled",
-        "budget_tokens": budget_tokens if thinking else 0,
-    }
+    kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
     response = completion(
         model=model,
         messages=messages,
@@ -67,7 +60,6 @@ def prompt_score(
     temperature: float | None = None,
     include_instruction: bool = True,
     thinking: bool = False,
-    budget_tokens: int = BUDGET_TOKENS_DEFAULT,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return a JSON score string evaluating `player` on the criteria."""
@@ -80,10 +72,7 @@ Return JSON exactly like: {{"scores": [{example_scores}]}}."""
         prompt += f"\n\nInstruction:\n{instruction}"
     prompt += f"\n\nOutput:\n{player}"
     kwargs = _completion_kwargs(api_base, api_key, temperature)
-    kwargs["thinking"] = {
-        "type": "enabled" if thinking else "disabled",
-        "budget_tokens": budget_tokens if thinking else 0,
-    }
+    kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
     response = completion(
         model=model,
         messages=[{"role": "system", "content": prompt}],
@@ -107,7 +96,6 @@ def prompt_pairwise(
     temperature: float | None = None,
     include_instruction: bool = True,
     thinking: bool = False,
-    budget_tokens: int = BUDGET_TOKENS_DEFAULT,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
     """Return which player wins in JSON using the given criteria."""
@@ -119,10 +107,7 @@ Return ONLY JSON {{"winner": "A"}} or {{"winner": "B"}}."""
         prompt += f"\n\nInstruction:\n{instruction}"
     prompt += f"\n\nPlayers:\n<A>{a}</A>\n<B>{b}</B>"
     kwargs = _completion_kwargs(api_base, api_key, temperature)
-    kwargs["thinking"] = {
-        "type": "enabled" if thinking else "disabled",
-        "budget_tokens": budget_tokens if thinking else 0,
-    }
+    kwargs["chat_template_kwargs"] = {"enable_thinking": thinking}
     response = completion(
         model=model,
         messages=[{"role": "system", "content": prompt}],
