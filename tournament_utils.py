@@ -74,10 +74,10 @@ def prompt_score(
         prompt += "Provide detailed reasons in English.\n"\
                 "Respond in plain text with two sections in following format:\n" \
                  "Reasons:\n<explain your reasoning in each criteria before write final score>\n\n\n" \
-                 f"Final verdict: <list of each criteria score> (e.g. [{example_scores}])"
+                 f"Final verdict: <list of each criteria score in range 1-10> (e.g. [{example_scores}])"
     else:
         prompt += "Respond in plain text exactly like:\n" \
-                 f"Final verdict: <list of each criteria score> (e.g. [{example_scores}])"
+                 f"Final verdict: <list of each criteria score in range 1-10> (e.g. [{example_scores}])"
 
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
