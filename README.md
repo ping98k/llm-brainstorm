@@ -29,6 +29,12 @@ This project provides a small interface for running "tournaments" between langua
    `chat_template_kwargs={"enable_thinking": True}` with each
    `litellm.completion` call for that model. Otherwise it sends
    `chat_template_kwargs={"enable_thinking": False}`.
+
+   The app uses [LiteLLM](https://github.com/BerriAI/litellm) to talk to
+   language models. If you leave `OPENAI_API_BASE` blank, LiteLLM defaults to
+   `https://api.openai.com/v1`. When the "API Token" field in the interface is
+   empty, the value from `OPENAI_API_KEY` will be used. These defaults let you
+   quickly connect to OpenAI without extra configuration.
 2. Install dependencies (example with `pip`):
    ```bash
    pip install gradio litellm python-dotenv tqdm matplotlib
