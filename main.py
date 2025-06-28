@@ -78,8 +78,8 @@ def run_tournament(
     generate_thinking,
     score_thinking,
     pairwise_thinking,
-    score_explain,
-    pairwise_explain,
+    score_explain=None,
+    pairwise_explain=None,
 ):
     instruction = instruction_input.strip()
     criteria_list = [c.strip() for c in criteria_input.split(",") if c.strip()] or ["Factuality", "Instruction Following", "Precision"]
@@ -127,6 +127,7 @@ def run_tournament(
     completion_tokens = 0
     score_outputs: list[str] = []
     pairwise_outputs: list[str] = []
+    match_cache: dict[tuple[str, str], str] = {}
 
     def add_usage(usage):
         nonlocal prompt_tokens, completion_tokens
@@ -224,6 +225,9 @@ def run_tournament(
         top_players = all_players
     if enable_pairwise_filter:
         def play(a, b):
+            key = tuple(sorted((a, b)))
+            if key in match_cache:
+                return match_cache[key]
             text, usage = prompt_pairwise(
                 instruction,
                 criteria_block(),
@@ -241,68 +245,49 @@ def run_tournament(
             add_usage(usage)
             pairwise_outputs.append(text)
             winner_label = _clean_json(text).get("winner", "A")
-            return a if winner_label == "A" else b
+            winner = a if winner_label == "A" else b
+            match_cache[key] = winner
+            return winner
 
-        def tournament_round(pairs, executor, progress):
+        def all_pairs(players):
+            for i in range(len(players)):
+                for j in range(i + 1, len(players)):
+                    yield players[i], players[j]
+
+        def rate(players, executor):
+            rating = {p: 1000.0 for p in players}
+            pairs = list(all_pairs(players))
             futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
-            results = []
+            prog = SimpleProgress(len(futures), "Elo matches")
+            K = 32
             for fut in as_completed(futures):
                 a, b = futures[fut]
                 winner = fut.result()
                 loser = b if winner == a else a
-                results.append((winner, loser))
-                yield from log(progress.step())
-            return results
-
-        def tournament(players, executor):
-            lost_to = {}
-            current = players[:]
-            progress = SimpleProgress(len(players) - 1, "Pairwise round")
-            while len(current) > 1:
-                leftover = current[-1] if len(current) % 2 == 1 else None
-                pairs = [(current[i], current[i + 1]) for i in range(0, len(current) - 1, 2)]
-                round_results = yield from tournament_round(pairs, executor, progress)
-                for w, l in round_results:
-                    lost_to[l] = w
-                current = [w for w, _ in round_results]
-                if leftover:
-                    current.append(leftover)
-            return current[0], lost_to
-
-        def get_candidates(champion, lost_to):
-            return [p for p, o in lost_to.items() if o == champion] + [champion]
-
-        def playoff(candidates, executor):
-            wins = {p: 0 for p in candidates}
-            pairs = [
-                (candidates[i], candidates[j])
-                for i in range(len(candidates))
-                for j in range(i + 1, len(candidates))
-            ]
-            futures = {executor.submit(play, a, b): (a, b) for a, b in pairs}
-            prog = SimpleProgress(len(futures), "Playoff")
-            for fut in as_completed(futures):
-                wins[fut.result()] += 1
+                ra, rb = rating[a], rating[b]
+                ea = 1 / (1 + 10 ** ((rb - ra) / 400))
+                eb = 1 - ea
+                if winner == a:
+                    rating[a] = ra + K * (1 - ea)
+                    rating[b] = rb + K * (0 - eb)
+                else:
+                    rating[a] = ra + K * (0 - ea)
+                    rating[b] = rb + K * (1 - eb)
                 yield from log(prog.step())
-            return sorted(candidates, key=lambda p: wins[p], reverse=True)
-
-        def get_top(players, executor):
-            champion, lost_to = yield from tournament(players, executor)
-            runner_up = lost_to.get(champion)
-            finalists = [champion] + ([runner_up] if runner_up else [])
-            semifinalists = [p for p, o in lost_to.items() if o in finalists and p not in finalists]
-            candidates = list(set(finalists + semifinalists + get_candidates(champion, lost_to)))
-            result = yield from playoff(candidates, executor)
-            return result[:num_top_picks]
+            return rating
 
         yield from log("Pairwise generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            top_k = yield from get_top(top_players, ex)
+            rating = yield from rate(top_players, ex)
+        top_k = sorted(top_players, key=rating.get, reverse=True)[:num_top_picks]
         for i, txt in enumerate(pairwise_outputs, 1):
             yield from log_completion(f"Pairwise completion {i}: ", txt)
+        top_picks_str = "\n\n\n=====================================================\n\n\n".join(
+            f"{p}\nElo: {rating[p]:.1f}" for p in top_k
+        )
     else:
         top_k = top_players[:num_top_picks]
-    top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
+        top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
     yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str, usage_str()
 
 demo = gr.Interface(

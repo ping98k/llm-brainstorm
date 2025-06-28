@@ -39,7 +39,7 @@ This project provides a small interface for running "tournaments" between langua
    ```
 4. Open the displayed local URL. At the top of the page you can optionally override the API base path and token (the token field is blank by default). Additional settings let you configure score and pairwise filtering.
 
-The interface will generate multiple answers, optionally filter them by score and run a pairwise tournament to select the best outputs.
+The interface will generate multiple answers, optionally filter them by score and run a pairwise tournament to select the best outputs. Results from previous pairwise comparisons are cached, so duplicate matches are skipped for faster tournaments. Pairwise results are aggregated using an Elo rating system to rank the players.
 
 ## Terminology
 
