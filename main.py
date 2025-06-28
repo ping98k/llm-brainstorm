@@ -140,6 +140,7 @@ def run_tournament(
     prompt_tokens = 0
     completion_tokens = 0
     score_outputs: list[str] = []
+    raw_scores: dict[str, list] = {}
     pairwise_outputs: list[str] = []
     match_cache: dict[tuple[str, str], str] = {}
 
@@ -216,17 +217,27 @@ def run_tournament(
             add_usage(usage)
             score_outputs.append((idx, text))
             data = _parse_verdict(text)
+            raw_vals = None
             if "scores" in data and isinstance(data["scores"], list):
-                vals = data["scores"]
-                return sum(vals) / len(vals) if vals else 0.0
-            return float(data.get("score", 0))
+                raw_vals = data["scores"]
+                avg = sum(raw_vals) / len(raw_vals) if raw_vals else 0.0
+            else:
+                try:
+                    avg = float(data.get("score", 0))
+                    raw_vals = [avg]
+                except Exception:
+                    avg = 0.0
+                    raw_vals = None
+            return avg, raw_vals
 
         yield from log("Histogram generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             prog = SimpleProgress(len(all_players), "Scoring")
             scores = {}
-            for (idx, p), s in zip(players_with_ids, ex.map(score, players_with_ids)):
-                scores[p] = s
+            for (idx, p), (s_val, raw_val) in zip(players_with_ids, ex.map(score, players_with_ids)):
+                scores[p] = s_val
+                if raw_val is not None:
+                    raw_scores[p] = raw_val
                 yield from log(prog.step())
         hist_fig = plt.figure()
         plt.hist(list(scores.values()), bins=10)
@@ -301,7 +312,7 @@ def run_tournament(
         for i, txt in enumerate(pairwise_outputs, 1):
             yield from log_completion(f"Pairwise completion {i}: ", txt)
         top_picks_str = "\n\n\n=====================================================\n\n\n".join(
-            f"{p}\nElo: {rating[p]:.1f}" for p in top_k
+            f"{p}\nElo: {rating[p]:.1f}" + (f"\nScore: {raw_scores.get(p)}" if p in raw_scores else "") for p in top_k
         )
     else:
         top_k = top_players[:num_top_picks]
