@@ -122,6 +122,7 @@ def run_tournament(
 
     process_log = []
     hist_fig = None
+    elo_fig = None
     top_picks_str = ""
     prompt_tokens = 0
     completion_tokens = 0
@@ -161,7 +162,7 @@ def run_tournament(
     def log(msg):
         process_log.append(msg)
         tqdm.write(msg)
-        yield "\n".join(process_log), hist_fig, top_picks_str, usage_str()
+        yield "\n".join(process_log), hist_fig, elo_fig, top_picks_str, usage_str()
     yield from log("Generating answers …")
     all_players, usage = generate_players(
         instruction,
@@ -279,7 +280,11 @@ def run_tournament(
         yield from log("Pairwise generating")
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             rating = yield from rate(top_players, ex)
-        top_k = sorted(top_players, key=rating.get, reverse=True)[:num_top_picks]
+        elo_fig = plt.figure()
+        players_sorted = sorted(rating, key=rating.get, reverse=True)
+        plt.bar(range(len(players_sorted)), [rating[p] for p in players_sorted])
+        plt.xticks(range(len(players_sorted)), [str(i + 1) for i in range(len(players_sorted))])
+        top_k = players_sorted[:num_top_picks]
         for i, txt in enumerate(pairwise_outputs, 1):
             yield from log_completion(f"Pairwise completion {i}: ", txt)
         top_picks_str = "\n\n\n=====================================================\n\n\n".join(
@@ -288,7 +293,7 @@ def run_tournament(
     else:
         top_k = top_players[:num_top_picks]
         top_picks_str = "\n\n\n=====================================================\n\n\n".join(top_k)
-    yield "\n".join(process_log + ["Done"]), hist_fig, top_picks_str, usage_str()
+    yield "\n".join(process_log + ["Done"]), hist_fig, elo_fig, top_picks_str, usage_str()
 
 demo = gr.Interface(
     fn=run_tournament,
@@ -320,6 +325,7 @@ demo = gr.Interface(
     outputs=[
         gr.Textbox(lines=10, label="Process"),
         gr.Plot(label="Score Distribution"),
+        gr.Plot(label="Elo Ratings"),
         gr.Textbox(lines=50, label="Top picks"),
         gr.Textbox(lines=5, label="Token Usage"),
     ],
