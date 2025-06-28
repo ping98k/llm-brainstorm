@@ -49,12 +49,25 @@ GENERATE_THINKING_DEFAULT = os.getenv("ENABLE_GENERATE_THINKING", "false").lower
 SCORE_THINKING_DEFAULT = os.getenv("ENABLE_SCORE_THINKING", "false").lower() == "true"
 PAIRWISE_THINKING_DEFAULT = os.getenv("ENABLE_PAIRWISE_THINKING", "false").lower() == "true"
 CRITERIA_DEFAULT = "Factuality,Concise,Precision"
-def _clean_json(txt):
+
+# Regex used to capture the final verdict from judge output
+FINAL_VERDICT_RE = re.compile(r"(?im)^final verdict:\s*(.*)$")
+
+
+def _parse_verdict(txt: str) -> dict:
+    """Extract verdict information from judge output."""
     txt = re.sub(r"^```.*?\n|```$", "", txt, flags=re.DOTALL).strip()
+    match = FINAL_VERDICT_RE.search(txt)
+    if not match:
+        return {}
+    verdict = match.group(1).strip()
     try:
-        return json.loads(txt)
-    except json.JSONDecodeError:
-        return ast.literal_eval(txt)
+        verdict_val = ast.literal_eval(verdict)
+    except Exception:
+        verdict_val = verdict
+    if isinstance(verdict_val, list):
+        return {"scores": verdict_val}
+    return {"winner": str(verdict_val)}
 
 def run_tournament(
     api_base,
@@ -202,7 +215,7 @@ def run_tournament(
             )
             add_usage(usage)
             score_outputs.append((idx, text))
-            data = _clean_json(text)
+            data = _parse_verdict(text)
             if "scores" in data and isinstance(data["scores"], list):
                 vals = data["scores"]
                 return sum(vals) / len(vals) if vals else 0.0
@@ -245,7 +258,7 @@ def run_tournament(
             )
             add_usage(usage)
             pairwise_outputs.append(text)
-            winner_label = _clean_json(text).get("winner", "A")
+            winner_label = _parse_verdict(text).get("winner", "A")
             winner = a if winner_label == "A" else b
             match_cache[key] = winner
             return winner

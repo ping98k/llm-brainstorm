@@ -31,25 +31,25 @@ def test_generate_players():
 
 
 def test_prompt_score():
-    resp = make_response([" {\"score\": [5]} "])
+    resp = make_response(["Final verdict: [5]"])
     with patch('tournament_utils.completion', return_value=resp) as mock_comp:
         result = tu.prompt_score('instr', ['c1'], 'block', 'pl', model='m', api_base='b', api_key='k', temperature=0.2, include_instruction=False)
         mock_comp.assert_called_once()
         assert mock_comp.call_args.kwargs['api_base'] == 'b'
         assert mock_comp.call_args.kwargs['api_key'] == 'k'
         assert mock_comp.call_args.kwargs['temperature'] == 0.2
-        assert result == '{"score": [5]}'
+        assert result == 'Final verdict: [5]'
 
 
 def test_prompt_pairwise():
-    resp = make_response([" {\"winner\": \"A\"} "])
+    resp = make_response(["Final verdict: A"])
     with patch('tournament_utils.completion', return_value=resp) as mock_comp:
         result = tu.prompt_pairwise('instr', 'block', 'A text', 'B text', model='m', api_base='b', api_key='k', temperature=0.3, include_instruction=False)
         mock_comp.assert_called_once()
         assert mock_comp.call_args.kwargs['api_base'] == 'b'
         assert mock_comp.call_args.kwargs['api_key'] == 'k'
         assert mock_comp.call_args.kwargs['temperature'] == 0.3
-        assert result == '{"winner": "A"}'
+        assert result == 'Final verdict: A'
 
 
 def test_thinking_passed_to_completion():
