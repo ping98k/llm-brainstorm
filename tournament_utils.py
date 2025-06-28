@@ -68,16 +68,16 @@ def prompt_score(
     prompt = f"""Evaluate the output below on the following criteria:
 {criteria_block}
 
-{'Provide detailed reasons in English.' if explain else 'Provide a short reason.'}
 """
 
     if explain:
-        prompt += "Respond in plain text with two sections exactly like:\n" \
-                 "Reasons: <your reasoning>\n" \
-                 f"Final verdict: [{example_scores}]"
+        prompt += "Provide detailed reasons in English.\n"\
+                "Respond in plain text with two sections in following format:\n" \
+                 "Reasons:\n<explain your reasoning in each criteria before write final score>\n\n\n" \
+                 f"Final verdict: <list of each criteria score> (e.g. [{example_scores}])"
     else:
         prompt += "Respond in plain text exactly like:\n" \
-                 f"Final verdict: [{example_scores}]"
+                 f"Final verdict: <list of each criteria score> (e.g. [{example_scores}])"
 
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
@@ -115,14 +115,14 @@ def prompt_pairwise(
     prompt = f"""Compare the two players below using:
 {criteria_block}
 
-{'Provide detailed reasons in English.' if explain else 'Provide a short reason.'}
 """
 
     verdict_example = "Final verdict: A or Final verdict: B"
     if explain:
         prompt += (
-            "Respond in plain text with two sections exactly like:\n"
-            "Reasons: <your reasoning>\n"
+            "Provide detailed reasons in English.\n" \
+            "Respond in plain text with two sections in following format:\n"
+            "Reasons:\n<explain your reasoning in each criteria before write final verdict>\n\n\n"
             f"{verdict_example}"
         )
     else:
