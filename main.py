@@ -283,7 +283,7 @@ def run_tournament(
         elo_fig = plt.figure()
         players_sorted = sorted(rating, key=rating.get, reverse=True)
         plt.bar(range(len(players_sorted)), [rating[p] for p in players_sorted])
-        plt.xticks(range(len(players_sorted)), [str(i + 1) for i in range(len(players_sorted))])
+        plt.xticks(range(len(players_sorted)), players_sorted, rotation=45, ha="right")
         top_k = players_sorted[:num_top_picks]
         for i, txt in enumerate(pairwise_outputs, 1):
             yield from log_completion(f"Pairwise completion {i}: ", txt)
