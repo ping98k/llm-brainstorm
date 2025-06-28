@@ -87,8 +87,14 @@ def test_run_tournament_full_loop():
          patch('main.plt.bar'):
         mock_gen.return_value = (['p1', 'p2', 'p3', 'p4'], {'prompt_tokens':1,'completion_tokens':1})
         scores = {'p1':3, 'p2':2, 'p3':1, 'p4':0}
-        mock_score.side_effect = lambda instr, cl, block, player, **kw: (json.dumps({'score': scores[player]}), {'prompt_tokens':1,'completion_tokens':1})
-        mock_pair.side_effect = lambda instr, block, a, b, **kw: (json.dumps({'winner': 'A'}), {'prompt_tokens':1,'completion_tokens':1})
+        mock_score.side_effect = lambda instr, cl, block, player, **kw: (
+            f"Final verdict: [{scores[player]}]",
+            {'prompt_tokens':1,'completion_tokens':1}
+        )
+        mock_pair.side_effect = lambda instr, block, a, b, **kw: (
+            "Final verdict: A",
+            {'prompt_tokens':1,'completion_tokens':1}
+        )
 
         results = list(main.run_tournament(
             api_base='b',
@@ -138,7 +144,10 @@ def test_run_tournament_pairwise_odd_players():
          patch('main.plt.hist'), \
          patch('main.plt.bar'):
         mock_gen.return_value = (['p1', 'p2', 'p3'], {'prompt_tokens':1,'completion_tokens':1})
-        mock_pair.side_effect = lambda instr, block, a, b, **kw: (json.dumps({'winner':'A'}), {'prompt_tokens':1,'completion_tokens':1})
+        mock_pair.side_effect = lambda instr, block, a, b, **kw: (
+            "Final verdict: A",
+            {'prompt_tokens':1,'completion_tokens':1}
+        )
 
         results = list(main.run_tournament(
             api_base='b',

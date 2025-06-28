@@ -63,18 +63,21 @@ def prompt_score(
     explain: bool = False,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
-    """Return a JSON score string evaluating `player` on the criteria."""
+    """Return a plaintext score evaluation for `player`."""
     example_scores = ", ".join(["1-10"] * len(criteria_list)) or "1-10"
     prompt = f"""Evaluate the output below on the following criteria:
 {criteria_block}
 
 """
+
     if explain:
-        prompt += f"""
-Provide detailed reasons in English for each criterion.
-Return JSON exactly like: {{"reasons":"","scores": [{example_scores}]}}.""".strip()
+        prompt += "Provide detailed reasons in English.\n"\
+                "Respond in plain text with two sections in following format:\n" \
+                 "Reasons:\n<explain your reasoning in each criteria before write final score>\n\n\n" \
+                 f"Final verdict: <list of each criteria score> (e.g. [{example_scores}])"
     else:
-        prompt += f"""Return JSON exactly like: {{"scores": [{example_scores}]}}."""
+        prompt += "Respond in plain text exactly like:\n" \
+                 f"Final verdict: <list of each criteria score> (e.g. [{example_scores}])"
 
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
@@ -108,18 +111,25 @@ def prompt_pairwise(
     explain: bool = False,
     return_usage: bool = False,
 ) -> str | tuple[str, object]:
-    """Return which player wins in JSON using the given criteria."""
+    """Return which player wins in plaintext using the given criteria."""
     prompt = f"""Compare the two players below using:
 {criteria_block}
 
 """
 
+    verdict_example = "Final verdict: A or Final verdict: B"
     if explain:
-        prompt += f"""
-Provide detailed reasons in English for each criterion.
-Return JSON exactly like: {{"reasons":"","winner": "A"}} or {{"reasons":"","winner": "B"}}.""".strip()
+        prompt += (
+            "Provide detailed reasons in English.\n" \
+            "Respond in plain text with two sections in following format:\n"
+            "Reasons:\n<explain your reasoning in each criteria before write final verdict>\n\n\n"
+            f"{verdict_example}"
+        )
     else:
-        prompt += f"""Return JSON exactly like: {{"winner": "A"}} or {{"winner": "B"}}."""
+        prompt += (
+            "Respond in plain text exactly like:\n"
+            f"{verdict_example}"
+        )
 
     if include_instruction:
         prompt += f"\n\nInstruction:\n{instruction}"
