@@ -39,6 +39,8 @@ sys.modules.setdefault('tqdm', fake_tqdm_mod)
 fake_plt = types.ModuleType('matplotlib.pyplot')
 fake_plt.figure = MagicMock(return_value='fig')
 fake_plt.hist = MagicMock()
+fake_plt.bar = MagicMock()
+fake_plt.xticks = MagicMock()
 fake_matplotlib = types.ModuleType('matplotlib')
 fake_matplotlib.pyplot = fake_plt
 sys.modules.setdefault('matplotlib', fake_matplotlib)
@@ -81,7 +83,8 @@ def test_run_tournament_full_loop():
          patch('main.as_completed', new=lambda futs: futs), \
          patch('main.tqdm', new=dummy_tqdm), \
          patch('main.plt.figure', return_value='fig'), \
-         patch('main.plt.hist'):
+         patch('main.plt.hist'), \
+         patch('main.plt.bar'):
         mock_gen.return_value = (['p1', 'p2', 'p3', 'p4'], {'prompt_tokens':1,'completion_tokens':1})
         scores = {'p1':3, 'p2':2, 'p3':1, 'p4':0}
         mock_score.side_effect = lambda instr, cl, block, player, **kw: (json.dumps({'score': scores[player]}), {'prompt_tokens':1,'completion_tokens':1})
@@ -111,9 +114,10 @@ def test_run_tournament_full_loop():
             pairwise_thinking=True,
         ))
 
-    process_log, hist_fig, top_picks, usage = results[-1]
+    process_log, hist_fig, elo_fig, top_picks, usage = results[-1]
     assert 'Done' in process_log
     assert hist_fig == 'fig'
+    assert elo_fig == 'fig'
     assert any(p in top_picks for p in {'p1', 'p2'})
     mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k', temperature=1, thinking=True, return_usage=True)
     assert 'Score completion' in process_log
@@ -131,7 +135,8 @@ def test_run_tournament_pairwise_odd_players():
          patch('main.as_completed', new=lambda futs: futs), \
          patch('main.tqdm', new=dummy_tqdm), \
          patch('main.plt.figure', return_value='fig'), \
-         patch('main.plt.hist'):
+         patch('main.plt.hist'), \
+         patch('main.plt.bar'):
         mock_gen.return_value = (['p1', 'p2', 'p3'], {'prompt_tokens':1,'completion_tokens':1})
         mock_pair.side_effect = lambda instr, block, a, b, **kw: (json.dumps({'winner':'A'}), {'prompt_tokens':1,'completion_tokens':1})
 
@@ -159,7 +164,7 @@ def test_run_tournament_pairwise_odd_players():
             pairwise_thinking=True,
         ))
 
-    process_log, fig, top_picks, usage = results[-1]
+    process_log, hist_fig, elo_fig, top_picks, usage = results[-1]
     assert 'Done' in process_log
     assert any(p in top_picks for p in {'p1', 'p2', 'p3'})
     assert mock_pair.call_count == 3
