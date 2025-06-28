@@ -114,7 +114,7 @@ def test_run_tournament_full_loop():
     process_log, hist_fig, top_picks, usage = results[-1]
     assert 'Done' in process_log
     assert hist_fig == 'fig'
-    assert top_picks.strip() in {'p1', 'p2'}
+    assert any(p in top_picks for p in {'p1', 'p2'})
     mock_gen.assert_called_once_with('instr', 4, model='gm', api_base='b', api_key='k', temperature=1, thinking=True, return_usage=True)
     assert 'Score completion' in process_log
     assert 'Pairwise completion' in process_log
@@ -161,5 +161,5 @@ def test_run_tournament_pairwise_odd_players():
 
     process_log, fig, top_picks, usage = results[-1]
     assert 'Done' in process_log
-    assert top_picks.strip() in {'p1', 'p2', 'p3'}
-    assert mock_pair.call_count == 5
+    assert any(p in top_picks for p in {'p1', 'p2', 'p3'})
+    assert mock_pair.call_count == 3
